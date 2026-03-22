@@ -240,9 +240,17 @@ src/
 cargo test
 ```
 
-52 unit tests across 4 modules:
+119 tests across 11 modules:
 
 - `config.rs` -- project/prefix lookups, resolve_prefix priority, TOML parsing
 - `ticket.rs` -- TicketId parsing and rejection, Display, canonical serialization
 - `parser.rs` -- filename parsing, ticket content parsing, roundtrip stability
-- `store.rs` -- filename sanitization
+- `store.rs` -- filename sanitization, scan, read, write, move, roundtrip
+- `commands/create.rs` -- ticket creation, auto-increment, project/prefix resolution
+- `commands/comment.rs` -- comment appending, file normalization
+- `commands/close.rs` -- move to done/
+- `commands/show.rs` -- display with various formats
+- `commands/list.rs` -- filtering by prefix/project, include done
+- `commands/rename.rs` -- title changes
+- `commands/modify.rs` -- cross-project moves, validation
+- `commands/rename_project.rs` -- bulk file rename, config updates, conflict detection

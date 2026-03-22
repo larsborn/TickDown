@@ -56,3 +56,95 @@ pub fn run(config: &Config, ticket_id: &str) -> Result<()> {
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::{Config, StatusConfig};
+    use std::collections::HashMap;
+
+    fn test_config(dir: &std::path::Path) -> Config {
+        let mut projects = HashMap::new();
+        projects.insert("TickDown".to_string(), "TD".to_string());
+        Config {
+            default_author: "Tester".to_string(),
+            notes_dir: dir.to_path_buf(),
+            statuses: StatusConfig {
+                values: vec!["New".into(), "Done".into()],
+                default: "New".to_string(),
+            },
+            projects,
+            config_path: dir.join(".tickdown.toml"),
+        }
+    }
+
+    #[test]
+    fn test_show_ticket() {
+        let dir = tempfile::tempdir().unwrap();
+        let config = test_config(dir.path());
+
+        std::fs::write(
+            dir.path().join("TD-1 Test.md"),
+            "# TD-1 Test\n* Status: In Progress\n\n## Author (2026-01-01 10:00)\nComment body.\n",
+        )
+        .unwrap();
+
+        run(&config, "TD-1").unwrap();
+    }
+
+    #[test]
+    fn test_show_ticket_no_status() {
+        let dir = tempfile::tempdir().unwrap();
+        let config = test_config(dir.path());
+
+        std::fs::write(dir.path().join("TD-1 Test.md"), "# TD-1 Test\n").unwrap();
+
+        run(&config, "TD-1").unwrap();
+    }
+
+    #[test]
+    fn test_show_ticket_with_preamble() {
+        let dir = tempfile::tempdir().unwrap();
+        let config = test_config(dir.path());
+
+        std::fs::write(
+            dir.path().join("TD-1 Test.md"),
+            "# TD-1 Test\n* Status: New\n\nSome preamble text.\n\n## Author (2026-01-01 10:00)\nBody.\n",
+        )
+        .unwrap();
+
+        run(&config, "TD-1").unwrap();
+    }
+
+    #[test]
+    fn test_show_closed_ticket() {
+        let dir = tempfile::tempdir().unwrap();
+        let config = test_config(dir.path());
+
+        let done_dir = dir.path().join("done");
+        std::fs::create_dir(&done_dir).unwrap();
+        std::fs::write(
+            done_dir.join("TD-1 Closed.md"),
+            "# TD-1 Closed\n* Status: Done\n",
+        )
+        .unwrap();
+
+        run(&config, "TD-1").unwrap();
+    }
+
+    #[test]
+    fn test_show_invalid_id() {
+        let dir = tempfile::tempdir().unwrap();
+        let config = test_config(dir.path());
+        let result = run(&config, "bad");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_show_not_found() {
+        let dir = tempfile::tempdir().unwrap();
+        let config = test_config(dir.path());
+        let result = run(&config, "TD-99");
+        assert!(result.is_err());
+    }
+}

@@ -56,3 +56,96 @@ pub fn run(
     println!("Moved {} -> {} ({})", old_id, ticket.id, new_path.display());
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::{Config, StatusConfig};
+    use std::collections::HashMap;
+
+    fn test_config(dir: &std::path::Path) -> Config {
+        let mut projects = HashMap::new();
+        projects.insert("TickDown".to_string(), "TD".to_string());
+        projects.insert("Other".to_string(), "OTH".to_string());
+        Config {
+            default_author: "Tester".to_string(),
+            notes_dir: dir.to_path_buf(),
+            statuses: StatusConfig {
+                values: vec!["New".into(), "Done".into()],
+                default: "New".to_string(),
+            },
+            projects,
+            config_path: dir.join(".tickdown.toml"),
+        }
+    }
+
+    #[test]
+    fn test_modify_moves_to_new_prefix() {
+        let dir = tempfile::tempdir().unwrap();
+        let config = test_config(dir.path());
+
+        std::fs::write(
+            dir.path().join("TD-1 Test.md"),
+            "# TD-1 Test\n* Status: New\n",
+        )
+        .unwrap();
+
+        run(&config, "TD-1", Some("Other"), None).unwrap();
+
+        assert!(!dir.path().join("TD-1 Test.md").exists());
+        assert!(dir.path().join("OTH-1 Test.md").exists());
+        let content = std::fs::read_to_string(dir.path().join("OTH-1 Test.md")).unwrap();
+        assert!(content.contains("# OTH-1 Test"));
+    }
+
+    #[test]
+    fn test_modify_by_prefix_directly() {
+        let dir = tempfile::tempdir().unwrap();
+        let config = test_config(dir.path());
+
+        std::fs::write(
+            dir.path().join("TD-1 Test.md"),
+            "# TD-1 Test\n* Status: New\n",
+        )
+        .unwrap();
+
+        run(&config, "TD-1", None, Some("OTH")).unwrap();
+
+        assert!(dir.path().join("OTH-1 Test.md").exists());
+    }
+
+    #[test]
+    fn test_modify_same_prefix_noop() {
+        let dir = tempfile::tempdir().unwrap();
+        let config = test_config(dir.path());
+
+        std::fs::write(
+            dir.path().join("TD-1 Test.md"),
+            "# TD-1 Test\n* Status: New\n",
+        )
+        .unwrap();
+
+        run(&config, "TD-1", Some("TickDown"), None).unwrap();
+
+        // File should still be there unchanged
+        assert!(dir.path().join("TD-1 Test.md").exists());
+    }
+
+    #[test]
+    fn test_modify_no_args() {
+        let dir = tempfile::tempdir().unwrap();
+        let config = test_config(dir.path());
+        let result = run(&config, "TD-1", None, None);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("--project or --prefix"));
+    }
+
+    #[test]
+    fn test_modify_both_args() {
+        let dir = tempfile::tempdir().unwrap();
+        let config = test_config(dir.path());
+        let result = run(&config, "TD-1", Some("Other"), Some("OTH"));
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("not both"));
+    }
+}

@@ -181,3 +181,139 @@ fn update_config_file(
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::{Config, StatusConfig};
+    use std::collections::HashMap;
+
+    fn setup_test(dir: &std::path::Path) -> Config {
+        let config_path = dir.join(".tickdown.toml");
+        std::fs::write(
+            &config_path,
+            r#"
+default_author = "Tester"
+notes_dir = "."
+
+[statuses]
+values = ["New", "Done"]
+default = "New"
+
+[projects]
+TickDown = "TD"
+Other = "OTH"
+"#,
+        )
+        .unwrap();
+
+        let mut projects = HashMap::new();
+        projects.insert("TickDown".to_string(), "TD".to_string());
+        projects.insert("Other".to_string(), "OTH".to_string());
+        Config {
+            default_author: "Tester".to_string(),
+            notes_dir: dir.to_path_buf(),
+            statuses: StatusConfig {
+                values: vec!["New".into(), "Done".into()],
+                default: "New".to_string(),
+            },
+            projects,
+            config_path,
+        }
+    }
+
+    #[test]
+    fn test_rename_project_changes_prefix() {
+        let dir = tempfile::tempdir().unwrap();
+        let config = setup_test(dir.path());
+
+        std::fs::write(
+            dir.path().join("TD-1 First.md"),
+            "# TD-1 First\n* Status: New\n",
+        )
+        .unwrap();
+        std::fs::write(
+            dir.path().join("TD-2 Second.md"),
+            "# TD-2 Second\n* Status: New\n",
+        )
+        .unwrap();
+
+        run(&config, "TickDown", None, Some("NEW")).unwrap();
+
+        assert!(!dir.path().join("TD-1 First.md").exists());
+        assert!(!dir.path().join("TD-2 Second.md").exists());
+        assert!(dir.path().join("NEW-1 First.md").exists());
+        assert!(dir.path().join("NEW-2 Second.md").exists());
+
+        // Content should have new prefix
+        let content = std::fs::read_to_string(dir.path().join("NEW-1 First.md")).unwrap();
+        assert!(content.contains("NEW-1"));
+        assert!(!content.contains("TD-1"));
+
+        // Config should be updated
+        let cfg = std::fs::read_to_string(dir.path().join(".tickdown.toml")).unwrap();
+        assert!(cfg.contains("NEW"));
+    }
+
+    #[test]
+    fn test_rename_project_changes_name() {
+        let dir = tempfile::tempdir().unwrap();
+        let config = setup_test(dir.path());
+
+        run(&config, "TickDown", Some("MyProject"), None).unwrap();
+
+        let cfg = std::fs::read_to_string(dir.path().join(".tickdown.toml")).unwrap();
+        assert!(cfg.contains("MyProject"));
+        assert!(!cfg.contains("TickDown"));
+        // Prefix should be unchanged
+        assert!(cfg.contains("TD"));
+    }
+
+    #[test]
+    fn test_rename_project_includes_done_dir() {
+        let dir = tempfile::tempdir().unwrap();
+        let config = setup_test(dir.path());
+
+        std::fs::write(
+            dir.path().join("TD-1 Open.md"),
+            "# TD-1 Open\n* Status: New\n",
+        )
+        .unwrap();
+        let done = dir.path().join("done");
+        std::fs::create_dir(&done).unwrap();
+        std::fs::write(done.join("TD-2 Closed.md"), "# TD-2 Closed\n* Status: Done\n").unwrap();
+
+        run(&config, "TickDown", None, Some("NEW")).unwrap();
+
+        assert!(dir.path().join("NEW-1 Open.md").exists());
+        assert!(done.join("NEW-2 Closed.md").exists());
+    }
+
+    #[test]
+    fn test_rename_project_no_args() {
+        let dir = tempfile::tempdir().unwrap();
+        let config = setup_test(dir.path());
+        let result = run(&config, "TickDown", None, None);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("--name or --prefix"));
+    }
+
+    #[test]
+    fn test_rename_project_prefix_conflict() {
+        let dir = tempfile::tempdir().unwrap();
+        let config = setup_test(dir.path());
+        // OTH prefix already used by "Other"
+        let result = run(&config, "TickDown", None, Some("OTH"));
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("already used"));
+    }
+
+    #[test]
+    fn test_rename_project_name_conflict() {
+        let dir = tempfile::tempdir().unwrap();
+        let config = setup_test(dir.path());
+        let result = run(&config, "TickDown", Some("Other"), None);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("already exists"));
+    }
+}
