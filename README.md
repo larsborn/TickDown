@@ -1,5 +1,8 @@
 # TickDown
 
+[![CI](https://github.com/larsborn/TickDown/actions/workflows/ci.yml/badge.svg)](https://github.com/larsborn/TickDown/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/larsborn/TickDown/graph/badge.svg)](https://codecov.io/gh/larsborn/TickDown)
+
 A command-line tool for managing markdown-based tickets. Tickets are plain
 `.md` files stored in a directory, with a `done/` subdirectory for closed
 tickets. TickDown parses existing files leniently (handling format variations
