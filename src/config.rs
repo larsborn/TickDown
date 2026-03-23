@@ -235,6 +235,58 @@ Bravo = "BRV"
     }
 
     #[test]
+    fn test_find_config_in_ancestors() {
+        let dir = tempfile::tempdir().unwrap();
+        let child = dir.path().join("a").join("b").join("c");
+        std::fs::create_dir_all(&child).unwrap();
+        let config_path = dir.path().join(".tickdown.toml");
+        std::fs::write(
+            &config_path,
+            r#"
+default_author = "Ancestor"
+notes_dir = "."
+
+[statuses]
+values = ["New"]
+default = "New"
+
+[projects]
+Foo = "FOO"
+"#,
+        )
+        .unwrap();
+
+        // Temporarily change cwd to the deeply nested child
+        let original_dir = std::env::current_dir().unwrap();
+        std::env::set_current_dir(&child).unwrap();
+
+        // Should find the config in an ancestor
+        let found = find_config_in_ancestors().unwrap();
+        assert_eq!(found, config_path);
+
+        std::env::set_current_dir(original_dir).unwrap();
+    }
+
+    #[test]
+    fn test_find_config_in_ancestors_not_found() {
+        let dir = tempfile::tempdir().unwrap();
+        let child = dir.path().join("isolated");
+        std::fs::create_dir_all(&child).unwrap();
+
+        let original_dir = std::env::current_dir().unwrap();
+        std::env::set_current_dir(&child).unwrap();
+
+        let result = find_config_in_ancestors();
+        std::env::set_current_dir(original_dir).unwrap();
+
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("No .tickdown.toml found"));
+    }
+
+    #[test]
     fn test_load_config_from_toml_string() {
         let toml_str = r#"
 default_author = "Test Author"

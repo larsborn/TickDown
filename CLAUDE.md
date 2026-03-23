@@ -91,18 +91,25 @@ all values.
 
 ## Tests
 
-52 unit tests across 4 modules. Run with `cargo test`. Tests cover:
+135 tests across 11 modules (97% line coverage). Run with `cargo test`.
+Use `cargo llvm-cov --summary-only` for per-file coverage. Tests cover:
 - `ticket.rs` -- TicketId parsing/rejection, Display, all canonical serialization
   variants (empty title, default status, preamble, comments with/without
   timestamps, empty body, multiple comments)
 - `config.rs` -- project/prefix lookups, resolve_prefix priority edge case
-  (project name matching another prefix), TOML deserialization
+  (project name matching another prefix), TOML deserialization, load from file,
+  load from env var, invalid/missing config, ancestor directory search
 - `parser.rs` -- filename formats (standard, dash, no title, zero-padded,
   double space, lowercase rejection), ticket parsing (standard, no heading,
   date without time, ID mismatch, multiple comments, leading whitespace,
   multi-author, no date, is_closed, missing status), roundtrip stability
-- `store.rs` -- filename sanitization for all path-unsafe characters, unicode
-  preservation
+- `store.rs` -- filename sanitization, scan, read, write, move, next_number,
+  roundtrip
+- `commands/*` -- integration tests for all commands: create (auto-increment,
+  project/prefix resolution), comment (append, normalize), close (move to done),
+  show (various formats, preamble, closed), list (filtering, empty, done),
+  rename (title change, preserves content), modify (cross-project move,
+  validation), rename_project (bulk rename, config update, conflict detection)
 
 ## Dependencies
 

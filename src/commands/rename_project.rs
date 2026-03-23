@@ -353,6 +353,29 @@ Other = "OTH"
     }
 
     #[test]
+    fn test_rename_project_file_conflict() {
+        let dir = tempfile::tempdir().unwrap();
+        let config = setup_test(dir.path());
+
+        // TD-1 exists and we want to rename TD -> NEW,
+        // but NEW-1 already exists -> should fail
+        std::fs::write(
+            dir.path().join("TD-1 First.md"),
+            "# TD-1 First\n* Status: New\n",
+        )
+        .unwrap();
+        std::fs::write(
+            dir.path().join("NEW-1 Conflict.md"),
+            "# NEW-1 Conflict\n* Status: New\n",
+        )
+        .unwrap();
+
+        let result = run(&config, "TickDown", None, Some("NEW"));
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Conflict"));
+    }
+
+    #[test]
     fn test_rename_project_unknown_project() {
         let dir = tempfile::tempdir().unwrap();
         let config = setup_test(dir.path());

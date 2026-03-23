@@ -248,7 +248,7 @@ src/
 cargo test
 ```
 
-119 tests across 11 modules:
+135 tests across 11 modules (97% line coverage):
 
 - `config.rs` -- project/prefix lookups, resolve_prefix priority, TOML parsing
 - `ticket.rs` -- TicketId parsing and rejection, Display, canonical serialization
