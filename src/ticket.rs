@@ -48,6 +48,7 @@ pub struct Comment {
 }
 
 impl TicketId {
+    #[cfg(test)]
     pub fn new(prefix: &str, number: u32) -> Self {
         TicketId {
             prefix: prefix.to_string(),

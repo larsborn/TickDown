@@ -10,12 +10,20 @@ that accumulate over time) but always writes back in a clean canonical format.
 
 ## Installation
 
+Download the latest pre-compiled binary from the
+[GitHub Releases](https://github.com/larsborn/TickDown/releases) page. Binaries
+are available for Windows (x86_64), Linux (x86_64), and macOS (x86_64). Place
+the binary somewhere on your `PATH`.
+
+### Building from source
+
+Alternatively, build it yourself with a Rust toolchain:
+
 ```
 cargo build --release
 ```
 
-The binary is at `target/release/td.exe`. Copy it somewhere on your `PATH`, or
-run it directly.
+The binary is at `target/release/td` (or `td.exe` on Windows).
 
 ## Configuration
 

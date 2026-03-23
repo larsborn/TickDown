@@ -15,6 +15,7 @@ pub struct Config {
 
 #[derive(Debug, Deserialize)]
 pub struct StatusConfig {
+    #[allow(dead_code)]
     pub values: Vec<String>,
     pub default: String,
 }
