@@ -82,7 +82,12 @@ pub fn load_config(config_path: Option<&Path>) -> Result<Config> {
 }
 
 fn find_config_in_ancestors() -> Result<PathBuf> {
-    let mut dir = std::env::current_dir()?;
+    let dir = std::env::current_dir()?;
+    find_config_from(&dir)
+}
+
+fn find_config_from(start: &Path) -> Result<PathBuf> {
+    let mut dir = start.to_path_buf();
     loop {
         let candidate = dir.join(".tickdown.toml");
         if candidate.exists() {
@@ -235,7 +240,7 @@ Bravo = "BRV"
     }
 
     #[test]
-    fn test_find_config_in_ancestors() {
+    fn test_find_config_from_ancestor() {
         let dir = tempfile::tempdir().unwrap();
         let child = dir.path().join("a").join("b").join("c");
         std::fs::create_dir_all(&child).unwrap();
@@ -256,29 +261,14 @@ Foo = "FOO"
         )
         .unwrap();
 
-        // Temporarily change cwd to the deeply nested child
-        let original_dir = std::env::current_dir().unwrap();
-        std::env::set_current_dir(&child).unwrap();
-
-        // Should find the config in an ancestor
-        let found = find_config_in_ancestors().unwrap();
+        let found = find_config_from(&child).unwrap();
         assert_eq!(found, config_path);
-
-        std::env::set_current_dir(original_dir).unwrap();
     }
 
     #[test]
-    fn test_find_config_in_ancestors_not_found() {
+    fn test_find_config_from_not_found() {
         let dir = tempfile::tempdir().unwrap();
-        let child = dir.path().join("isolated");
-        std::fs::create_dir_all(&child).unwrap();
-
-        let original_dir = std::env::current_dir().unwrap();
-        std::env::set_current_dir(&child).unwrap();
-
-        let result = find_config_in_ancestors();
-        std::env::set_current_dir(original_dir).unwrap();
-
+        let result = find_config_from(dir.path());
         assert!(result.is_err());
         assert!(result
             .unwrap_err()
