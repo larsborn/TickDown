@@ -77,4 +77,23 @@ mod tests {
         let result = run(&config, "TD-99", "Title");
         assert!(result.is_err());
     }
+
+    #[test]
+    fn test_rename_preserves_comments() {
+        let dir = tempfile::tempdir().unwrap();
+        let config = test_config(dir.path());
+
+        std::fs::write(
+            dir.path().join("TD-1 Old.md"),
+            "# TD-1 Old\n* Status: In Progress\n\n## Author (2026-01-01 10:00)\nKeep me.\n",
+        )
+        .unwrap();
+
+        run(&config, "TD-1", "New").unwrap();
+
+        let content = std::fs::read_to_string(dir.path().join("TD-1 New.md")).unwrap();
+        assert!(content.contains("# TD-1 New"));
+        assert!(content.contains("Keep me."));
+        assert!(content.contains("In Progress"));
+    }
 }

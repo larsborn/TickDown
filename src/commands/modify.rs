@@ -148,4 +148,28 @@ mod tests {
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("not both"));
     }
+
+    #[test]
+    fn test_modify_unknown_project() {
+        let dir = tempfile::tempdir().unwrap();
+        let config = test_config(dir.path());
+
+        std::fs::write(
+            dir.path().join("TD-1 Test.md"),
+            "# TD-1 Test\n* Status: New\n",
+        )
+        .unwrap();
+
+        let result = run(&config, "TD-1", Some("Nonexistent"), None);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Unknown project or prefix"));
+    }
+
+    #[test]
+    fn test_modify_invalid_id() {
+        let dir = tempfile::tempdir().unwrap();
+        let config = test_config(dir.path());
+        let result = run(&config, "bad", Some("Other"), None);
+        assert!(result.is_err());
+    }
 }

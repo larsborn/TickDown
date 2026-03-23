@@ -165,6 +165,76 @@ mod tests {
     }
 
     #[test]
+    fn test_load_config_from_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let config_path = dir.path().join(".tickdown.toml");
+        std::fs::write(
+            &config_path,
+            r#"
+default_author = "File Author"
+notes_dir = "."
+
+[statuses]
+values = ["New", "Done"]
+default = "New"
+
+[projects]
+Alpha = "ALP"
+"#,
+        )
+        .unwrap();
+
+        let config = load_config(Some(&config_path)).unwrap();
+        assert_eq!(config.default_author, "File Author");
+        assert_eq!(config.prefix_for_project("Alpha"), Some("ALP"));
+        assert_eq!(config.config_path, config_path);
+    }
+
+    #[test]
+    fn test_load_config_missing_file() {
+        let result = load_config(Some(std::path::Path::new("/nonexistent/.tickdown.toml")));
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_load_config_invalid_toml() {
+        let dir = tempfile::tempdir().unwrap();
+        let config_path = dir.path().join(".tickdown.toml");
+        std::fs::write(&config_path, "this is not valid toml {{{{").unwrap();
+
+        let result = load_config(Some(&config_path));
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_load_config_from_env_var() {
+        let dir = tempfile::tempdir().unwrap();
+        let config_path = dir.path().join(".tickdown.toml");
+        std::fs::write(
+            &config_path,
+            r#"
+default_author = "Env Author"
+notes_dir = "."
+
+[statuses]
+values = ["New"]
+default = "New"
+
+[projects]
+Bravo = "BRV"
+"#,
+        )
+        .unwrap();
+
+        std::env::set_var("TICKDOWN_CONFIG", &config_path);
+        let config = load_config(None).unwrap();
+        std::env::remove_var("TICKDOWN_CONFIG");
+
+        assert_eq!(config.default_author, "Env Author");
+        assert_eq!(config.prefix_for_project("Bravo"), Some("BRV"));
+    }
+
+    #[test]
     fn test_load_config_from_toml_string() {
         let toml_str = r#"
 default_author = "Test Author"

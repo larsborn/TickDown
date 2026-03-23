@@ -316,4 +316,48 @@ Other = "OTH"
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("already exists"));
     }
+
+    #[test]
+    fn test_rename_project_both_name_and_prefix() {
+        let dir = tempfile::tempdir().unwrap();
+        let config = setup_test(dir.path());
+
+        std::fs::write(
+            dir.path().join("TD-1 Test.md"),
+            "# TD-1 Test\n* Status: New\n",
+        )
+        .unwrap();
+
+        run(&config, "TickDown", Some("NewName"), Some("NEW")).unwrap();
+
+        // File should be renamed
+        assert!(dir.path().join("NEW-1 Test.md").exists());
+
+        // Config should have new name and new prefix
+        let cfg = std::fs::read_to_string(dir.path().join(".tickdown.toml")).unwrap();
+        assert!(cfg.contains("NewName"));
+        assert!(cfg.contains("NEW"));
+        assert!(!cfg.contains("TickDown"));
+    }
+
+    #[test]
+    fn test_rename_project_no_ticket_files() {
+        let dir = tempfile::tempdir().unwrap();
+        let config = setup_test(dir.path());
+
+        // No TD-* files exist
+        run(&config, "TickDown", None, Some("NEW")).unwrap();
+
+        let cfg = std::fs::read_to_string(dir.path().join(".tickdown.toml")).unwrap();
+        assert!(cfg.contains("NEW"));
+    }
+
+    #[test]
+    fn test_rename_project_unknown_project() {
+        let dir = tempfile::tempdir().unwrap();
+        let config = setup_test(dir.path());
+        let result = run(&config, "Nonexistent", Some("Foo"), None);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Unknown project or prefix"));
+    }
 }

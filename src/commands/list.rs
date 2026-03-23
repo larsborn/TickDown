@@ -151,6 +151,16 @@ mod tests {
     }
 
     #[test]
+    fn test_list_ticket_with_empty_title() {
+        let dir = tempfile::tempdir().unwrap();
+        let config = test_config(dir.path());
+
+        std::fs::write(dir.path().join("TD-1.md"), "# TD-1\n* Status: New\n").unwrap();
+
+        run(&config, None, None, false).unwrap();
+    }
+
+    #[test]
     fn test_list_includes_done() {
         let dir = tempfile::tempdir().unwrap();
         let config = test_config(dir.path());

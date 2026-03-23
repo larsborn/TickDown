@@ -147,4 +147,28 @@ mod tests {
         let result = run(&config, "TD-99");
         assert!(result.is_err());
     }
+
+    #[test]
+    fn test_show_empty_title() {
+        let dir = tempfile::tempdir().unwrap();
+        let config = test_config(dir.path());
+
+        std::fs::write(dir.path().join("TD-1.md"), "# TD-1\n* Status: New\n").unwrap();
+
+        run(&config, "TD-1").unwrap();
+    }
+
+    #[test]
+    fn test_show_comment_without_timestamp() {
+        let dir = tempfile::tempdir().unwrap();
+        let config = test_config(dir.path());
+
+        std::fs::write(
+            dir.path().join("TD-1 Test.md"),
+            "# TD-1 Test\n* Status: New\n\n## SomeAuthor\nComment body.\n",
+        )
+        .unwrap();
+
+        run(&config, "TD-1").unwrap();
+    }
 }
