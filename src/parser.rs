@@ -13,8 +13,49 @@ pub fn parse_filename(stem: &str) -> Option<(TicketId, String)> {
     Some((TicketId { prefix, number }, title))
 }
 
+/// Extract optional YAML frontmatter delimited by `---` from the start of content.
+/// Returns `(Some(frontmatter_text), remaining_content)` if found, or `(None, content)` if not.
+pub fn extract_frontmatter(content: &str) -> (Option<String>, &str) {
+    let trimmed_start = content.trim_start_matches('\u{feff}'); // skip BOM if present
+    if !trimmed_start.starts_with("---") {
+        return (None, content);
+    }
+    // Find end of opening delimiter line
+    let after_open = match trimmed_start.find('\n') {
+        Some(pos) => pos + 1,
+        None => return (None, content),
+    };
+    // Verify opening line is just `---` (with optional trailing whitespace/CR)
+    if trimmed_start[..after_open].trim() != "---" {
+        return (None, content);
+    }
+    // Find closing `---` line
+    for (i, line) in trimmed_start[after_open..].lines().enumerate() {
+        if line.trim() == "---" {
+            let fm_text = &trimmed_start[after_open..after_open + trimmed_start[after_open..].lines().take(i).map(|l| l.len() + 1).sum::<usize>()];
+            let fm = fm_text.trim_end_matches('\n').trim_end_matches('\r');
+            // Find start of content after closing delimiter
+            let close_start = after_open + trimmed_start[after_open..]
+                .lines()
+                .take(i)
+                .map(|l| l.len() + 1)
+                .sum::<usize>();
+            let after_close = close_start + line.len() + 1;
+            let remaining = if after_close <= trimmed_start.len() {
+                &trimmed_start[after_close..]
+            } else {
+                ""
+            };
+            return (Some(fm.to_string()), remaining);
+        }
+    }
+    // No closing delimiter found — treat as no frontmatter
+    (None, content)
+}
+
 /// Parse ticket file content into a Ticket struct. Never errors on format issues.
 pub fn parse_ticket(id: TicketId, filename_title: &str, content: &str, is_closed: bool) -> Ticket {
+    let (frontmatter, body) = extract_frontmatter(content);
     let comment_re =
         Regex::new(r"^\s*##\s+(.+?)\s*(?:\((\d{4}-\d{2}-\d{2})(?:\s+(\d{2}:\d{2}))?\))?\s*$")
             .unwrap();
@@ -27,7 +68,7 @@ pub fn parse_ticket(id: TicketId, filename_title: &str, content: &str, is_closed
     let mut current_comment: Option<(String, Option<NaiveDateTime>, Vec<String>)> = None;
     let mut in_header = true;
 
-    for line in content.lines() {
+    for line in body.lines() {
         // Check for comment header
         if let Some(caps) = comment_re.captures(line) {
             // Flush previous comment
@@ -91,6 +132,7 @@ pub fn parse_ticket(id: TicketId, filename_title: &str, content: &str, is_closed
         id,
         title,
         status,
+        frontmatter,
         preamble: preamble_lines.join("\n").trim().to_string(),
         comments,
         is_closed,
@@ -357,5 +399,68 @@ mod tests {
             clean_heading_title("nullteilerfrei.de"),
             "nullteilerfrei.de"
         );
+    }
+
+    // --- extract_frontmatter ---
+
+    #[test]
+    fn test_extract_frontmatter_present() {
+        let content = "---\nsource: github\nrepo: https://example.com\n---\n# LAW-1 Title\n";
+        let (fm, rest) = extract_frontmatter(content);
+        assert_eq!(fm.as_deref(), Some("source: github\nrepo: https://example.com"));
+        assert_eq!(rest, "# LAW-1 Title\n");
+    }
+
+    #[test]
+    fn test_extract_frontmatter_absent() {
+        let content = "# LAW-1 Title\n* Status: New\n";
+        let (fm, rest) = extract_frontmatter(content);
+        assert!(fm.is_none());
+        assert_eq!(rest, content);
+    }
+
+    #[test]
+    fn test_extract_frontmatter_unclosed() {
+        let content = "---\nsource: github\n# LAW-1 Title\n";
+        let (fm, rest) = extract_frontmatter(content);
+        assert!(fm.is_none());
+        assert_eq!(rest, content);
+    }
+
+    #[test]
+    fn test_extract_frontmatter_empty() {
+        let content = "---\n---\n# LAW-1 Title\n";
+        let (fm, rest) = extract_frontmatter(content);
+        assert_eq!(fm.as_deref(), Some(""));
+        assert_eq!(rest, "# LAW-1 Title\n");
+    }
+
+    #[test]
+    fn test_parse_ticket_with_frontmatter() {
+        let content = "---\nsource: github\n---\n# LAW-1 Title\n* Status: New\n\n## Lars (2026-01-01 10:00)\nDid stuff.\n";
+        let id = TicketId { prefix: "LAW".into(), number: 1 };
+        let ticket = parse_ticket(id, "Title", content, false);
+        assert_eq!(ticket.frontmatter.as_deref(), Some("source: github"));
+        assert_eq!(ticket.title, "Title");
+        assert_eq!(ticket.status.as_deref(), Some("New"));
+        assert_eq!(ticket.comments.len(), 1);
+    }
+
+    #[test]
+    fn test_parse_ticket_frontmatter_roundtrip() {
+        let content = "---\nsource: github\nrepo: https://example.com\n---\n# LAW-5 Feature\n* Status: In Progress\n\n## Lars (2026-03-21 14:30)\nDid the thing.\n";
+        let id = TicketId { prefix: "LAW".into(), number: 5 };
+        let ticket = parse_ticket(id, "Feature", content, false);
+        let canonical = ticket.to_canonical("New");
+        assert_eq!(canonical, content);
+    }
+
+    #[test]
+    fn test_parse_ticket_no_frontmatter_unchanged() {
+        let content = "# LAW-1 Title\n* Status: New\n";
+        let id = TicketId { prefix: "LAW".into(), number: 1 };
+        let ticket = parse_ticket(id, "Title", content, false);
+        assert!(ticket.frontmatter.is_none());
+        assert_eq!(ticket.to_canonical("New"), content);
     }
 }

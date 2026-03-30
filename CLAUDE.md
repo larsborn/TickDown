@@ -50,6 +50,12 @@ The production config file is at:
 - **Preamble preservation**: Content between the heading/status and the first
   `## ` comment header is stored as a `preamble` field and preserved through
   normalize cycles.
+- **Frontmatter preservation**: Optional YAML frontmatter (`---` delimited) at
+  the top of a ticket file is parsed into `frontmatter: Option<String>` and
+  preserved through normalize cycles. Stored as raw text (no YAML parsing
+  dependency). Intended for sync-tool metadata (GitHub repo, Jira instance,
+  etc.). `create` sets `frontmatter: None`; sync tools add it later. The parser
+  is lenient: unclosed `---` is treated as no frontmatter.
 - **No git integration**: The notes directory is synced via Nextcloud, not git.
 - **Windows-first**: ANSI color support is explicitly enabled for cmd.exe.
   Editor fallback is `notepad`.
@@ -91,7 +97,7 @@ all values.
 
 ## Tests
 
-135 tests across 11 modules (97% line coverage). Run with `cargo test`.
+146 tests across 11 modules. Run with `cargo test`.
 Use `cargo llvm-cov --summary-only` for per-file coverage. Tests cover:
 - `ticket.rs` -- TicketId parsing/rejection, Display, all canonical serialization
   variants (empty title, default status, preamble, comments with/without
@@ -102,7 +108,8 @@ Use `cargo llvm-cov --summary-only` for per-file coverage. Tests cover:
 - `parser.rs` -- filename formats (standard, dash, no title, zero-padded,
   double space, lowercase rejection), ticket parsing (standard, no heading,
   date without time, ID mismatch, multiple comments, leading whitespace,
-  multi-author, no date, is_closed, missing status), roundtrip stability
+  multi-author, no date, is_closed, missing status), frontmatter extraction
+  (present, absent, unclosed, empty), frontmatter roundtrip stability
 - `store.rs` -- filename sanitization, scan, read, write, move, next_number,
   roundtrip
 - `commands/*` -- integration tests for all commands: create (auto-increment,

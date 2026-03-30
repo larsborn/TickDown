@@ -208,6 +208,7 @@ mod tests {
             },
             title: title.to_string(),
             status: Some("New".to_string()),
+            frontmatter: None,
             preamble: String::new(),
             comments: vec![],
             is_closed,
@@ -545,6 +546,7 @@ mod tests {
             },
             title: "Test".to_string(),
             status: Some("New".to_string()),
+            frontmatter: None,
             preamble: String::new(),
             comments: vec![Comment {
                 author: "Author".to_string(),
@@ -670,6 +672,7 @@ mod tests {
             },
             title: "Roundtrip".to_string(),
             status: Some("In Progress".to_string()),
+            frontmatter: None,
             preamble: String::new(),
             comments: vec![
                 Comment {
@@ -700,5 +703,37 @@ mod tests {
         assert_eq!(read_back.comments[0].body, "First.");
         assert_eq!(read_back.comments[1].author, "Bob");
         assert_eq!(read_back.comments[1].body, "Second.");
+    }
+
+    #[test]
+    fn test_write_then_read_roundtrip_with_frontmatter() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = TicketStore::new(dir.path());
+
+        let ticket = Ticket {
+            id: TicketId {
+                prefix: "LAW".to_string(),
+                number: 1,
+            },
+            title: "Synced".to_string(),
+            status: Some("New".to_string()),
+            frontmatter: Some("source: github\nrepo: https://example.com".to_string()),
+            preamble: String::new(),
+            comments: vec![],
+            is_closed: false,
+        };
+
+        store.write_ticket(&ticket, "New").unwrap();
+
+        let id = TicketId {
+            prefix: "LAW".into(),
+            number: 1,
+        };
+        let read_back = store.read_ticket(&id).unwrap();
+        assert_eq!(
+            read_back.frontmatter.as_deref(),
+            Some("source: github\nrepo: https://example.com")
+        );
+        assert_eq!(read_back.title, "Synced");
     }
 }

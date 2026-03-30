@@ -27,6 +27,7 @@ pub fn run(config: &Config, project: &str, title: &str) -> Result<()> {
         id: id.clone(),
         title: title.to_string(),
         status: Some(config.statuses.default.clone()),
+        frontmatter: None,
         preamble: String::new(),
         comments: vec![Comment {
             author: config.default_author.clone(),

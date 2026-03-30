@@ -35,6 +35,7 @@ pub struct Ticket {
     pub id: TicketId,
     pub title: String,
     pub status: Option<String>,
+    pub frontmatter: Option<String>,
     pub preamble: String,
     pub comments: Vec<Comment>,
     pub is_closed: bool,
@@ -126,6 +127,7 @@ mod tests {
             id: TicketId::new("LAW", 1),
             title: "Test".to_string(),
             status: Some("New".to_string()),
+            frontmatter: None,
             preamble: String::new(),
             comments: vec![],
             is_closed: false,
@@ -139,6 +141,7 @@ mod tests {
             id: TicketId::new("IDEA", 1),
             title: String::new(),
             status: None,
+            frontmatter: None,
             preamble: String::new(),
             comments: vec![],
             is_closed: false,
@@ -152,6 +155,7 @@ mod tests {
             id: TicketId::new("LAW", 1),
             title: "T".to_string(),
             status: None,
+            frontmatter: None,
             preamble: String::new(),
             comments: vec![],
             is_closed: false,
@@ -166,6 +170,7 @@ mod tests {
             id: TicketId::new("LAW", 1),
             title: "T".to_string(),
             status: Some("Done".to_string()),
+            frontmatter: None,
             preamble: String::new(),
             comments: vec![],
             is_closed: false,
@@ -180,6 +185,7 @@ mod tests {
             id: TicketId::new("IDEA", 1),
             title: String::new(),
             status: None,
+            frontmatter: None,
             preamble: "Some old content\nMore lines".to_string(),
             comments: vec![],
             is_closed: false,
@@ -201,6 +207,7 @@ mod tests {
             id: TicketId::new("LAW", 5),
             title: "Feature".to_string(),
             status: Some("New".to_string()),
+            frontmatter: None,
             preamble: String::new(),
             comments: vec![Comment {
                 author: "Lars".to_string(),
@@ -226,6 +233,7 @@ mod tests {
             id: TicketId::new("LAW", 1),
             title: "T".to_string(),
             status: Some("New".to_string()),
+            frontmatter: None,
             preamble: String::new(),
             comments: vec![Comment {
                 author: "Meeting".to_string(),
@@ -248,6 +256,7 @@ mod tests {
             id: TicketId::new("LAW", 1),
             title: "T".to_string(),
             status: Some("New".to_string()),
+            frontmatter: None,
             preamble: String::new(),
             comments: vec![Comment {
                 author: "Lars".to_string(),
@@ -277,6 +286,7 @@ mod tests {
             id: TicketId::new("LAW", 1),
             title: "T".to_string(),
             status: Some("New".to_string()),
+            frontmatter: None,
             preamble: String::new(),
             comments: vec![
                 Comment {
@@ -295,11 +305,69 @@ mod tests {
         let out = ticket.to_canonical("New");
         assert!(out.contains("## A (2026-01-01 10:00)\nFirst.\n\n## B (2026-01-02 11:00)\nSecond.\n"));
     }
+
+    #[test]
+    fn test_canonical_with_frontmatter() {
+        let ticket = Ticket {
+            id: TicketId::new("LAW", 1),
+            title: "Test".to_string(),
+            status: Some("New".to_string()),
+            frontmatter: Some("source: github\nrepo: https://github.com/user/repo".to_string()),
+            preamble: String::new(),
+            comments: vec![],
+            is_closed: false,
+        };
+        assert_eq!(
+            ticket.to_canonical("New"),
+            "---\nsource: github\nrepo: https://github.com/user/repo\n---\n# LAW-1 Test\n* Status: New\n"
+        );
+    }
+
+    #[test]
+    fn test_canonical_with_empty_frontmatter() {
+        let ticket = Ticket {
+            id: TicketId::new("LAW", 1),
+            title: "Test".to_string(),
+            status: Some("New".to_string()),
+            frontmatter: Some(String::new()),
+            preamble: String::new(),
+            comments: vec![],
+            is_closed: false,
+        };
+        assert_eq!(
+            ticket.to_canonical("New"),
+            "---\n---\n# LAW-1 Test\n* Status: New\n"
+        );
+    }
+
+    #[test]
+    fn test_canonical_without_frontmatter_unchanged() {
+        let ticket = Ticket {
+            id: TicketId::new("LAW", 1),
+            title: "Test".to_string(),
+            status: Some("New".to_string()),
+            frontmatter: None,
+            preamble: String::new(),
+            comments: vec![],
+            is_closed: false,
+        };
+        assert_eq!(ticket.to_canonical("New"), "# LAW-1 Test\n* Status: New\n");
+    }
 }
 
 impl Ticket {
     pub fn to_canonical(&self, default_status: &str) -> String {
         let mut out = String::new();
+
+        // Frontmatter
+        if let Some(ref fm) = self.frontmatter {
+            out.push_str("---\n");
+            out.push_str(fm);
+            if !fm.is_empty() && !fm.ends_with('\n') {
+                out.push('\n');
+            }
+            out.push_str("---\n");
+        }
 
         // Heading
         if self.title.is_empty() {
