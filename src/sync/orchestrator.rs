@@ -78,6 +78,13 @@ pub fn sync_project(
 
     // Fetch remote issues (lightweight, no comments)
     let remote_issues = provider.list_issues()?;
+    println!(
+        "  Fetched {} remote issues, {} local ({} synced, {} unsynced)",
+        remote_issues.len(),
+        local_synced.len() + local_unsynced.len(),
+        local_synced.len(),
+        local_unsynced.len(),
+    );
     let mut remote_map: HashMap<String, RemoteIssue> = HashMap::new();
     for issue in remote_issues {
         remote_map.insert(issue.remote_id.clone(), issue);
@@ -89,7 +96,7 @@ pub fn sync_project(
         let local_dirty = current_hash != metadata.content_hash;
 
         if let Some(remote) = remote_map.remove(remote_id) {
-            let remote_dirty = remote.updated_at > metadata.remote_updated;
+            let remote_dirty = remote.updated_at != metadata.remote_updated;
 
             if local_dirty && remote_dirty {
                 eprintln!(
@@ -98,16 +105,35 @@ pub fn sync_project(
                 );
                 summary.conflicts += 1;
             } else if local_dirty {
-                match push_comments(
-                    &store,
-                    ticket,
-                    &metadata,
-                    provider,
-                    sync_config,
-                    default_status,
-                ) {
-                    Ok(()) => summary.pushed_comments += 1,
-                    Err(e) => summary.errors.push(format!("{}: {}", ticket.id, e)),
+                let new_count = ticket.comments.len() - metadata.comment_count;
+                if new_count > 0 {
+                    match push_comments(
+                        &store,
+                        ticket,
+                        &metadata,
+                        provider,
+                        sync_config,
+                        default_status,
+                    ) {
+                        Ok(()) => summary.pushed_comments += 1,
+                        Err(e) => summary.errors.push(format!("{}: {}", ticket.id, e)),
+                    }
+                } else {
+                    // Local content changed but no new comments to push
+                    // (e.g., preamble edit). Just update the hash.
+                    let mut ticket = ticket.clone();
+                    let hash = compute_content_hash(&ticket, default_status);
+                    let new_meta = SyncMetadata {
+                        content_hash: hash,
+                        ..metadata.clone()
+                    };
+                    ticket.frontmatter =
+                        Some(new_meta.merge_into_frontmatter(ticket.frontmatter.as_deref()));
+                    if let Err(e) = store.write_ticket(&ticket, default_status) {
+                        summary.errors.push(format!("{}: {}", ticket.id, e));
+                    } else {
+                        summary.unchanged += 1;
+                    }
                 }
             } else if remote_dirty {
                 match pull_issue(
@@ -190,18 +216,20 @@ fn pull_issue(
 
     let is_closed = full.state == RemoteState::Closed;
 
-    // Build comments: body as first comment, then actual comments
+    // Build comments: body as first comment, then actual comments.
+    // Escape `## ` at line starts so the TickDown parser doesn't treat
+    // Markdown headings in GitHub content as comment headers.
     let mut comments = Vec::new();
     comments.push(Comment {
         author: full.author.clone(),
         timestamp: Some(full.created_at.naive_utc()),
-        body: full.body.clone(),
+        body: escape_body(full.body.clone()),
     });
     for rc in &full.comments {
         comments.push(Comment {
             author: rc.author.clone(),
             timestamp: Some(rc.created_at.naive_utc()),
-            body: rc.body.clone(),
+            body: escape_body(rc.body.clone()),
         });
     }
 
@@ -335,9 +363,42 @@ fn format_comment_for_push(comment: &Comment) -> String {
     }
     if !comment.body.is_empty() {
         parts.push(String::new());
-        parts.push(comment.body.clone());
+        parts.push(unescape_body(comment.body.clone()));
     }
     parts.join("\n")
+}
+
+/// Escape Markdown heading syntax in body text so the TickDown parser
+/// doesn't treat `## heading` inside a comment body as a new comment header.
+fn escape_body(body: String) -> String {
+    body.lines()
+        .map(|line| {
+            let trimmed = line.trim_start();
+            if trimmed.starts_with("## ") {
+                let indent = &line[..line.len() - trimmed.len()];
+                format!("{}\\## {}", indent, &trimmed[3..])
+            } else {
+                line.to_string()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// Reverse the escaping done by `escape_body` when pushing content back.
+fn unescape_body(body: String) -> String {
+    body.lines()
+        .map(|line| {
+            let trimmed = line.trim_start();
+            if trimmed.starts_with("\\## ") {
+                let indent = &line[..line.len() - trimmed.len()];
+                format!("{}## {}", indent, &trimmed[4..])
+            } else {
+                line.to_string()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 /// Show sync status for a project (read-only, no remote fetch).
@@ -756,5 +817,60 @@ mod tests {
         let result = format_comment_for_push(&comment);
         assert!(result.contains("*Lars (2026-03-21 14:30)*"));
         assert!(result.contains("Did the thing."));
+    }
+
+    #[test]
+    fn test_escape_body_headings() {
+        let body = "Some text\n## Heading\nMore text\n## Another".to_string();
+        let escaped = escape_body(body);
+        assert_eq!(escaped, "Some text\n\\## Heading\nMore text\n\\## Another");
+    }
+
+    #[test]
+    fn test_escape_body_no_headings() {
+        let body = "Normal text\nNo headings here\n# Single hash is fine".to_string();
+        let escaped = escape_body(body.clone());
+        assert_eq!(escaped, body);
+    }
+
+    #[test]
+    fn test_escape_body_indented_heading() {
+        let body = "  ## Indented heading".to_string();
+        let escaped = escape_body(body);
+        assert_eq!(escaped, "  \\## Indented heading");
+    }
+
+    #[test]
+    fn test_unescape_body_roundtrip() {
+        let original = "Text\n## Heading\n  ## Indented\nPlain".to_string();
+        let escaped = escape_body(original.clone());
+        let unescaped = unescape_body(escaped);
+        assert_eq!(unescaped, original);
+    }
+
+    #[test]
+    fn test_escape_body_empty() {
+        assert_eq!(escape_body(String::new()), "");
+    }
+
+    #[test]
+    fn test_pull_escapes_markdown_headings() {
+        let dir = tempfile::tempdir().unwrap();
+        let config = test_config(dir.path());
+        let sync_cfg = test_sync_config();
+        let issue = make_remote_issue("1", "Issue", "## Problem\nDetails\n## Steps\n1. do thing");
+        let provider = MockProvider::new(vec![issue]);
+
+        let summary = sync_project(&config, &sync_cfg, &provider).unwrap();
+        assert_eq!(summary.pulled, 1);
+
+        let store = TicketStore::new(dir.path());
+        let id = TicketId { prefix: "TP".into(), number: 1 };
+        let ticket = store.read_ticket(&id).unwrap();
+        // Body should be escaped — `## ` replaced with `\## `
+        assert!(ticket.comments[0].body.contains("\\## Problem"));
+        assert!(ticket.comments[0].body.contains("\\## Steps"));
+        // Should only have 1 comment (body), not split into multiple
+        assert_eq!(ticket.comments.len(), 1);
     }
 }

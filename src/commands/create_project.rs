@@ -46,7 +46,7 @@ pub fn run(config: &Config, name: &str, prefix: &str) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::{StatusConfig, SyncConfig};
+    use crate::config::StatusConfig;
     use std::collections::HashMap;
 
     fn setup_test(dir: &std::path::Path) -> Config {

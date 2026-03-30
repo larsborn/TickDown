@@ -14,6 +14,10 @@ cargo build --release
 cargo test
 ```
 
+Always run both `cargo test` and `cargo build --release` before considering
+work complete. The release build catches warnings and optimizations that the
+debug build may not.
+
 The binary is `td.exe`. Config resolution: `--config` flag > `TICKDOWN_CONFIG`
 env var > `.tickdown.toml` in cwd or ancestors.
 

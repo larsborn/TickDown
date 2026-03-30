@@ -135,10 +135,10 @@ enum Commands {
         #[arg(long)]
         prefix: Option<String>,
     },
-    /// Sync with remote issue trackers
+    /// Sync with remote issue trackers (runs sync for all projects if no subcommand given)
     Sync {
         #[command(subcommand)]
-        action: SyncAction,
+        action: Option<SyncAction>,
     },
     /// Rename an entire project (name and/or prefix)
     RenameProject {
@@ -189,17 +189,18 @@ fn main() -> Result<()> {
             prefix.as_deref(),
         ),
         Commands::Sync { action } => match action {
-            SyncAction::Init {
+            Some(SyncAction::Init {
                 provider,
                 repo,
                 project,
-            } => commands::sync::init(&config, &provider, &repo, &project),
-            SyncAction::Run { project } => {
+            }) => commands::sync::init(&config, &provider, &repo, &project),
+            Some(SyncAction::Run { project }) => {
                 commands::sync::run(&config, project.as_deref())
             }
-            SyncAction::Status { project } => {
+            Some(SyncAction::Status { project }) => {
                 commands::sync::status(&config, project.as_deref())
             }
+            None => commands::sync::run(&config, None),
         },
         Commands::RenameProject {
             current,
