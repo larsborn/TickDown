@@ -218,6 +218,7 @@ Other = "OTH"
                 default: "New".to_string(),
             },
             projects,
+            sync: vec![],
             config_path,
         }
     }

@@ -36,6 +36,13 @@ The production config file is at:
   that normalize on touch. `show`, `list`, `edit` are read-only. `close` just
   moves files. `rename` changes titles, `modify` moves tickets between projects,
   `rename_project` renames an entire project (files + config).
+- `sync/` -- Two-way sync with external issue trackers. `mod.rs` defines the
+  `SyncProvider` trait and shared types (`RemoteIssue`, `RemoteComment`).
+  `github.rs` implements the GitHub provider via the `gh` CLI (JSON parsing).
+  `metadata.rs` handles `sync_*` frontmatter fields and SHA-256 content hashing
+  for dirty detection. `orchestrator.rs` contains the core sync algorithm
+  (pull, push-comments, push-new, conflict detection).
+- `commands/sync.rs` -- CLI handler for `sync init`, `sync run`, `sync status`.
 - `main.rs` -- Clap derive CLI. Also enables Windows ANSI terminal support for
   colored output in cmd.exe.
 
@@ -97,28 +104,69 @@ all values.
 
 ## Tests
 
-146 tests across 11 modules. Run with `cargo test`.
+169 tests across 15 modules. Run with `cargo test`.
 Use `cargo llvm-cov --summary-only` for per-file coverage. Tests cover:
 - `ticket.rs` -- TicketId parsing/rejection, Display, all canonical serialization
   variants (empty title, default status, preamble, comments with/without
   timestamps, empty body, multiple comments)
 - `config.rs` -- project/prefix lookups, resolve_prefix priority edge case
-  (project name matching another prefix), TOML deserialization, load from file,
-  load from env var, invalid/missing config, ancestor directory search
+  (project name matching another prefix), TOML deserialization (with and without
+  `[[sync]]`), load from file, load from env var, invalid/missing config,
+  ancestor directory search
 - `parser.rs` -- filename formats (standard, dash, no title, zero-padded,
   double space, lowercase rejection), ticket parsing (standard, no heading,
   date without time, ID mismatch, multiple comments, leading whitespace,
   multi-author, no date, is_closed, missing status), frontmatter extraction
   (present, absent, unclosed, empty), frontmatter roundtrip stability
-- `store.rs` -- filename sanitization, scan, read, write, move, next_number,
-  roundtrip
+- `store.rs` -- filename sanitization, scan, read, write, move (to/from done),
+  next_number, roundtrip
 - `commands/*` -- integration tests for all commands: create (auto-increment,
   project/prefix resolution), comment (append, normalize), close (move to done),
   show (various formats, preamble, closed), list (filtering, empty, done),
   rename (title change, preserves content), modify (cross-project move,
   validation), rename_project (bulk rename, config update, conflict detection)
+- `sync/metadata.rs` -- SyncMetadata parse/write roundtrip, merge preserves
+  non-sync fields, content hash consistency/exclusion
+- `sync/github.rs` -- JSON parsing for issue list, issue detail, empty/no
+  comments, invalid JSON
+- `sync/orchestrator.rs` -- pull-new, pull-with-comments, push-new,
+  unchanged-no-action, comment formatting (all with MockProvider)
+
+## Sync feature
+
+Two-way sync with GitHub Issues via `gh` CLI. Generic `SyncProvider` trait
+for future Jira/Redmine support.
+
+- `td sync init github owner/repo --project Name` -- configure and initial pull
+- `td sync run [project]` -- bidirectional sync (all projects if omitted)
+- `td sync status [project]` -- show dirty state (read-only, no remote fetch)
+
+**Content mapping**: GitHub issue body → first TickDown Comment (preamble stays
+free for local notes). GitHub comments → subsequent Comments.
+
+**Dirty detection**: SHA-256 hash of canonical content (excluding frontmatter)
+stored as `sync_hash` in frontmatter. Hash mismatch = locally dirty. Remote
+`updatedAt` comparison = remotely dirty. Both dirty = conflict (skip + warn).
+
+**Push scope (current)**: Only new comments are pushed. Title/body/status push
+is deferred. New local tickets in synced projects auto-push as new issues.
+
+**Config**: `[[sync]]` array in `.tickdown.toml`:
+```toml
+[[sync]]
+project = "MyProject"
+provider = "github"
+repo = "owner/repo"
+```
+
+## Documentation
+
+Always keep `CLAUDE.md` and `README.md` up-to-date when making changes. This
+includes: new commands, changed behavior, new config options, updated test
+counts, and project structure changes. Both files should reflect the current
+state of the codebase.
 
 ## Dependencies
 
-clap 4 (derive), serde + toml, chrono, anyhow, regex, colored. No async, no
-database, no network. Intentionally minimal.
+clap 4 (derive), serde + toml, chrono, anyhow, regex, colored, serde_json,
+sha2. No async, no database. Sync uses `gh` CLI for GitHub API.

@@ -2,6 +2,7 @@ mod commands;
 mod config;
 mod parser;
 mod store;
+mod sync;
 mod ticket;
 
 use anyhow::Result;
@@ -36,6 +37,30 @@ struct Cli {
 
     #[command(subcommand)]
     command: Commands,
+}
+
+#[derive(Subcommand)]
+enum SyncAction {
+    /// Initialize sync for a project with a remote repo
+    Init {
+        /// Provider name (e.g., "github")
+        provider: String,
+        /// Remote repository (e.g., "owner/repo")
+        repo: String,
+        /// Project name (must exist in config)
+        #[arg(long)]
+        project: String,
+    },
+    /// Run sync for a project (or all synced projects)
+    Run {
+        /// Project name to sync (syncs all if omitted)
+        project: Option<String>,
+    },
+    /// Show sync status without making changes
+    Status {
+        /// Project name (shows all if omitted)
+        project: Option<String>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -103,6 +128,11 @@ enum Commands {
         #[arg(long)]
         prefix: Option<String>,
     },
+    /// Sync with remote issue trackers
+    Sync {
+        #[command(subcommand)]
+        action: SyncAction,
+    },
     /// Rename an entire project (name and/or prefix)
     RenameProject {
         /// Current project name or prefix
@@ -148,6 +178,19 @@ fn main() -> Result<()> {
             project.as_deref(),
             prefix.as_deref(),
         ),
+        Commands::Sync { action } => match action {
+            SyncAction::Init {
+                provider,
+                repo,
+                project,
+            } => commands::sync::init(&config, &provider, &repo, &project),
+            SyncAction::Run { project } => {
+                commands::sync::run(&config, project.as_deref())
+            }
+            SyncAction::Status { project } => {
+                commands::sync::status(&config, project.as_deref())
+            }
+        },
         Commands::RenameProject {
             current,
             name,

@@ -182,6 +182,16 @@ impl TicketStore {
         std::fs::rename(&src, &dest)?;
         Ok(dest)
     }
+
+    pub fn move_from_done(&self, id: &TicketId) -> Result<PathBuf> {
+        let src = self
+            .find_file_in_dir(&self.done_dir, id)?
+            .ok_or_else(|| anyhow::anyhow!("Ticket {} not found in done/", id))?;
+        let filename = src.file_name().unwrap();
+        let dest = self.root.join(filename);
+        std::fs::rename(&src, &dest)?;
+        Ok(dest)
+    }
 }
 
 fn sanitize_filename(title: &str) -> String {
@@ -652,6 +662,35 @@ mod tests {
             number: 99,
         };
         assert!(store.move_to_done(&id).is_err());
+    }
+
+    #[test]
+    fn test_move_from_done() {
+        let dir = tempfile::tempdir().unwrap();
+        let done = dir.path().join("done");
+        std::fs::create_dir(&done).unwrap();
+        write_file(&done, "LAW-1 T.md", "# LAW-1 T\n");
+
+        let store = TicketStore::new(dir.path());
+        let id = TicketId {
+            prefix: "LAW".into(),
+            number: 1,
+        };
+        let dest = store.move_from_done(&id).unwrap();
+        assert_eq!(dest, dir.path().join("LAW-1 T.md"));
+        assert!(dest.exists());
+        assert!(!done.join("LAW-1 T.md").exists());
+    }
+
+    #[test]
+    fn test_move_from_done_not_found() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = TicketStore::new(dir.path());
+        let id = TicketId {
+            prefix: "LAW".into(),
+            number: 99,
+        };
+        assert!(store.move_from_done(&id).is_err());
     }
 
     // --- roundtrip: write then read ---

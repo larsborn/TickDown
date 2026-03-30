@@ -9,8 +9,17 @@ pub struct Config {
     pub notes_dir: PathBuf,
     pub statuses: StatusConfig,
     pub projects: HashMap<String, String>,
+    #[serde(default)]
+    pub sync: Vec<SyncConfig>,
     #[serde(skip)]
     pub config_path: PathBuf,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct SyncConfig {
+    pub project: String,
+    pub provider: String,
+    pub repo: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -60,6 +69,7 @@ fn test_config() -> Config {
             default: "New".to_string(),
         },
         projects,
+        sync: vec![],
         config_path: PathBuf::from(".tickdown.toml"),
     }
 }
@@ -163,6 +173,7 @@ mod tests {
                 default: "New".to_string(),
             },
             projects,
+            sync: vec![],
             config_path: PathBuf::from("."),
         };
         // "GTN" as input matches the project name "GTN" -> prefix "SPECIAL"
@@ -294,5 +305,61 @@ MyProject = "MP"
         assert_eq!(config.notes_dir, PathBuf::from("C:\\test"));
         assert_eq!(config.statuses.default, "New");
         assert_eq!(config.prefix_for_project("MyProject"), Some("MP"));
+        assert!(config.sync.is_empty());
+    }
+
+    #[test]
+    fn test_load_config_with_sync() {
+        let toml_str = r#"
+default_author = "Test"
+notes_dir = "."
+
+[statuses]
+values = ["New"]
+default = "New"
+
+[projects]
+MyProject = "MP"
+
+[[sync]]
+project = "MyProject"
+provider = "github"
+repo = "owner/repo"
+"#;
+        let config: Config = toml::from_str(toml_str).unwrap();
+        assert_eq!(config.sync.len(), 1);
+        assert_eq!(config.sync[0].project, "MyProject");
+        assert_eq!(config.sync[0].provider, "github");
+        assert_eq!(config.sync[0].repo, "owner/repo");
+    }
+
+    #[test]
+    fn test_load_config_multiple_sync() {
+        let toml_str = r#"
+default_author = "Test"
+notes_dir = "."
+
+[statuses]
+values = ["New"]
+default = "New"
+
+[projects]
+A = "AA"
+B = "BB"
+
+[[sync]]
+project = "A"
+provider = "github"
+repo = "owner/a"
+
+[[sync]]
+project = "B"
+provider = "github"
+repo = "owner/b"
+"#;
+        let config: Config = toml::from_str(toml_str).unwrap();
+        assert_eq!(config.sync.len(), 2);
+        assert_eq!(config.sync[0].repo, "owner/a");
+        assert_eq!(config.sync[1].repo, "owner/b");
     }
 }

@@ -86,6 +86,7 @@ mod tests {
                 default: "New".to_string(),
             },
             projects,
+            sync: vec![],
             config_path: dir.join(".tickdown.toml"),
         }
     }

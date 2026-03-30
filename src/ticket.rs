@@ -356,6 +356,13 @@ mod tests {
 }
 
 impl Ticket {
+    /// Canonical content excluding frontmatter, for sync hash computation.
+    pub fn content_for_hash(&self, default_status: &str) -> String {
+        let mut copy = self.clone();
+        copy.frontmatter = None;
+        copy.to_canonical(default_status)
+    }
+
     pub fn to_canonical(&self, default_status: &str) -> String {
         let mut out = String::new();
 
