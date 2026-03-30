@@ -88,13 +88,13 @@ enum Commands {
     #[command(alias = "ls")]
     List {
         /// Filter by prefix
-        #[arg(long)]
+        #[arg(short, long)]
         prefix: Option<String>,
         /// Filter by project name
-        #[arg(long)]
+        #[arg(short = 'P', long)]
         project: Option<String>,
         /// Include closed tickets from done/
-        #[arg(long)]
+        #[arg(short, long)]
         all: bool,
     },
     /// Open ticket in $EDITOR
