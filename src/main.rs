@@ -72,6 +72,13 @@ enum Commands {
         /// Ticket title
         title: String,
     },
+    /// Create a new project in the config
+    CreateProject {
+        /// Project name
+        name: String,
+        /// Ticket ID prefix (e.g., "TD", "PNO")
+        prefix: String,
+    },
     /// Pretty-print a ticket
     Show {
         /// Ticket ID (e.g., LAW-2)
@@ -153,6 +160,9 @@ fn main() -> Result<()> {
 
     match cli.command {
         Commands::Create { project, title } => commands::create::run(&config, &project, &title),
+        Commands::CreateProject { name, prefix } => {
+            commands::create_project::run(&config, &name, &prefix)
+        }
         Commands::Show { ticket_id } => commands::show::run(&config, &ticket_id),
         Commands::List {
             prefix,

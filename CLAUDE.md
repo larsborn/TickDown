@@ -36,6 +36,7 @@ The production config file is at:
   that normalize on touch. `show`, `list`, `edit` are read-only. `close` just
   moves files. `rename` changes titles, `modify` moves tickets between projects,
   `rename_project` renames an entire project (files + config).
+  `create_project` adds a new project to the config file.
 - `sync/` -- Two-way sync with external issue trackers. `mod.rs` defines the
   `SyncProvider` trait and shared types (`RemoteIssue`, `RemoteComment`).
   `github.rs` implements the GitHub provider via the `gh` CLI (JSON parsing).
@@ -104,7 +105,7 @@ all values.
 
 ## Tests
 
-169 tests across 15 modules. Run with `cargo test`.
+174 tests across 16 modules. Run with `cargo test`.
 Use `cargo llvm-cov --summary-only` for per-file coverage. Tests cover:
 - `ticket.rs` -- TicketId parsing/rejection, Display, all canonical serialization
   variants (empty title, default status, preamble, comments with/without

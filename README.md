@@ -59,6 +59,7 @@ Usage: td [OPTIONS] <COMMAND>
 
 Commands:
   create          Create a new ticket
+  create-project  Create a new project in the config
   show            Pretty-print a ticket
   list (ls)       List tickets
   edit            Open ticket in $EDITOR
@@ -106,6 +107,17 @@ Created TD-5 at C:\...\TickDown\TD-5 Implement search command.md
 
 The number is auto-incremented by scanning existing tickets (both open and
 closed) for the highest number with that prefix.
+
+### Create a project
+
+```
+$ td create-project Piano PNO
+Created project Piano (PNO)
+```
+
+Adds a new project to `.tickdown.toml`. The prefix must start with an uppercase
+letter and contain only uppercase letters and digits. Rejects duplicate names
+or prefixes.
 
 ### Add a comment
 
@@ -342,6 +354,7 @@ src/
     orchestrator.rs  Core sync algorithm (pull, push, conflict detection)
   commands/
     create.rs         Create new ticket with auto-incremented number
+    create_project.rs Create a new project in the config
     show.rs           Pretty-print ticket with colored output
     list.rs           List tickets with filtering
     edit.rs           Open in $EDITOR
@@ -359,7 +372,7 @@ src/
 cargo test
 ```
 
-169 tests across 15 modules:
+174 tests across 16 modules:
 
 - `config.rs` -- project/prefix lookups, resolve_prefix priority, TOML parsing
   (with and without `[[sync]]`)
@@ -372,6 +385,7 @@ cargo test
 - `sync/github.rs` -- JSON parsing for issue lists and details
 - `sync/orchestrator.rs` -- pull, push, conflict detection (MockProvider)
 - `commands/create.rs` -- ticket creation, auto-increment, project/prefix resolution
+- `commands/create_project.rs` -- project creation, name/prefix validation and conflicts
 - `commands/comment.rs` -- comment appending, file normalization
 - `commands/close.rs` -- move to done/
 - `commands/show.rs` -- display with various formats
