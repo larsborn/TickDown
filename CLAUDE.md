@@ -109,7 +109,8 @@ all values.
 
 ## Tests
 
-174 tests across 16 modules. Run with `cargo test`.
+225 tests across 16 modules. Run with `cargo test`.
+Overall coverage ~94% (regions/lines/functions).
 Use `cargo llvm-cov --summary-only` for per-file coverage. Tests cover:
 - `ticket.rs` -- TicketId parsing/rejection, Display, all canonical serialization
   variants (empty title, default status, preamble, comments with/without
@@ -133,9 +134,16 @@ Use `cargo llvm-cov --summary-only` for per-file coverage. Tests cover:
 - `sync/metadata.rs` -- SyncMetadata parse/write roundtrip, merge preserves
   non-sync fields, content hash consistency/exclusion
 - `sync/github.rs` -- JSON parsing for issue list, issue detail, empty/no
-  comments, invalid JSON
+  comments, invalid JSON, datetime parse errors (invalid/missing fields),
+  unknown state treated as closed, list item error propagation
 - `sync/orchestrator.rs` -- pull-new, pull-with-comments, push-new,
-  unchanged-no-action, comment formatting (all with MockProvider)
+  unchanged-no-action, comment formatting, conflict detection, pull updates
+  on remote dirty, local-dirty hash-only update, push comments on synced
+  ticket, open/closed state transitions, remote deleted warning, foreign
+  provider metadata as unsynced, `show_status`, `init_sync`,
+  `append_sync_to_config` (all with MockProvider)
+- `commands/sync.rs` -- init validation (unknown provider/project, duplicate
+  config), `resolve_sync_configs` filtering and error paths, provider factory
 
 ## Sync feature
 

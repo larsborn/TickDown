@@ -116,3 +116,153 @@ fn create_provider(sync_config: &SyncConfig) -> Result<Box<dyn crate::sync::Sync
         other => bail!("Unknown sync provider: {}", other),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::StatusConfig;
+    use std::collections::HashMap;
+
+    fn make_config(sync: Vec<SyncConfig>) -> Config {
+        let mut projects = HashMap::new();
+        projects.insert("TickDown".to_string(), "LAW".to_string());
+        projects.insert("Other".to_string(), "OT".to_string());
+        Config {
+            default_author: "Tester".to_string(),
+            notes_dir: std::path::PathBuf::from("."),
+            statuses: StatusConfig {
+                values: vec!["New".to_string()],
+                default: "New".to_string(),
+            },
+            projects,
+            sync,
+            config_path: std::path::PathBuf::from(".tickdown.toml"),
+        }
+    }
+
+    // --- init validation paths ---
+
+    #[test]
+    fn test_init_rejects_unknown_provider() {
+        let config = make_config(vec![]);
+        let result = init(&config, "jira", "owner/repo", "TickDown");
+        assert!(result.is_err());
+        let msg = result.unwrap_err().to_string();
+        assert!(msg.contains("Unknown sync provider"));
+    }
+
+    #[test]
+    fn test_init_rejects_unknown_project() {
+        let config = make_config(vec![]);
+        let result = init(&config, "github", "owner/repo", "DoesNotExist");
+        assert!(result.is_err());
+        let msg = result.unwrap_err().to_string();
+        assert!(msg.contains("Unknown project"));
+    }
+
+    #[test]
+    fn test_init_rejects_duplicate_sync() {
+        let config = make_config(vec![SyncConfig {
+            project: "TickDown".to_string(),
+            provider: "github".to_string(),
+            repo: "owner/repo".to_string(),
+        }]);
+        let result = init(&config, "github", "owner/repo", "TickDown");
+        assert!(result.is_err());
+        let msg = result.unwrap_err().to_string();
+        assert!(msg.contains("already configured"));
+    }
+
+    // --- resolve_sync_configs ---
+
+    #[test]
+    fn test_resolve_sync_configs_all() {
+        let config = make_config(vec![
+            SyncConfig {
+                project: "TickDown".to_string(),
+                provider: "github".to_string(),
+                repo: "a/b".to_string(),
+            },
+            SyncConfig {
+                project: "Other".to_string(),
+                provider: "github".to_string(),
+                repo: "c/d".to_string(),
+            },
+        ]);
+        let configs = resolve_sync_configs(&config, None).unwrap();
+        assert_eq!(configs.len(), 2);
+    }
+
+    #[test]
+    fn test_resolve_sync_configs_filtered() {
+        let config = make_config(vec![
+            SyncConfig {
+                project: "TickDown".to_string(),
+                provider: "github".to_string(),
+                repo: "a/b".to_string(),
+            },
+            SyncConfig {
+                project: "Other".to_string(),
+                provider: "github".to_string(),
+                repo: "c/d".to_string(),
+            },
+        ]);
+        let configs = resolve_sync_configs(&config, Some("TickDown")).unwrap();
+        assert_eq!(configs.len(), 1);
+        assert_eq!(configs[0].project, "TickDown");
+    }
+
+    #[test]
+    fn test_resolve_sync_configs_not_found() {
+        let config = make_config(vec![SyncConfig {
+            project: "TickDown".to_string(),
+            provider: "github".to_string(),
+            repo: "a/b".to_string(),
+        }]);
+        let result = resolve_sync_configs(&config, Some("Other"));
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("No sync configuration"));
+    }
+
+    #[test]
+    fn test_resolve_sync_configs_all_empty() {
+        let config = make_config(vec![]);
+        let configs = resolve_sync_configs(&config, None).unwrap();
+        assert!(configs.is_empty());
+    }
+
+    // --- status for empty sync list ---
+
+    #[test]
+    fn test_status_with_no_sync_configs() {
+        let config = make_config(vec![]);
+        // Should not error, just print "No sync configurations found."
+        status(&config, None).unwrap();
+    }
+
+    // --- create_provider ---
+
+    #[test]
+    fn test_create_provider_github() {
+        let sc = SyncConfig {
+            project: "TickDown".to_string(),
+            provider: "github".to_string(),
+            repo: "owner/repo".to_string(),
+        };
+        let provider = create_provider(&sc).unwrap();
+        assert_eq!(provider.name(), "github");
+    }
+
+    #[test]
+    fn test_create_provider_unknown() {
+        let sc = SyncConfig {
+            project: "TickDown".to_string(),
+            provider: "jira".to_string(),
+            repo: "owner/repo".to_string(),
+        };
+        match create_provider(&sc) {
+            Ok(_) => panic!("expected error"),
+            Err(e) => assert!(e.to_string().contains("Unknown sync provider")),
+        }
+    }
+}

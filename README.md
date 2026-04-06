@@ -372,7 +372,7 @@ src/
 cargo test
 ```
 
-174 tests across 16 modules:
+225 tests across 16 modules, ~94% line coverage:
 
 - `config.rs` -- project/prefix lookups, resolve_prefix priority, TOML parsing
   (with and without `[[sync]]`)
@@ -382,8 +382,13 @@ cargo test
 - `store.rs` -- filename sanitization, scan, read, write, move to/from done,
   roundtrip
 - `sync/metadata.rs` -- sync metadata parse/write, content hashing
-- `sync/github.rs` -- JSON parsing for issue lists and details
-- `sync/orchestrator.rs` -- pull, push, conflict detection (MockProvider)
+- `sync/github.rs` -- JSON parsing for issue lists and details, datetime error
+  paths, unknown-state handling
+- `sync/orchestrator.rs` -- pull, push, conflict detection, state transitions
+  (open/closed), hash-only updates, foreign-provider metadata, `init_sync`,
+  `show_status`, `append_sync_to_config` (MockProvider)
+- `commands/sync.rs` -- init validation (unknown provider/project, duplicates),
+  `resolve_sync_configs` filtering, provider factory
 - `commands/create.rs` -- ticket creation, auto-increment, project/prefix resolution
 - `commands/create_project.rs` -- project creation, name/prefix validation and conflicts
 - `commands/comment.rs` -- comment appending, file normalization

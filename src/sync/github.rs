@@ -306,4 +306,152 @@ mod tests {
         let result = parse_issue_list("not json");
         assert!(result.is_err());
     }
+
+    #[test]
+    fn test_parse_datetime_valid() {
+        let dt = parse_datetime("2026-03-30T14:00:00Z").unwrap();
+        assert_eq!(dt.to_rfc3339(), "2026-03-30T14:00:00+00:00");
+    }
+
+    #[test]
+    fn test_parse_datetime_with_offset() {
+        let dt = parse_datetime("2026-03-30T14:00:00+02:00").unwrap();
+        // Should be normalized to UTC
+        assert_eq!(dt.to_rfc3339(), "2026-03-30T12:00:00+00:00");
+    }
+
+    #[test]
+    fn test_parse_datetime_invalid() {
+        let result = parse_datetime("not a date");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Failed to parse datetime"));
+    }
+
+    #[test]
+    fn test_parse_datetime_invalid_format() {
+        let result = parse_datetime("2026-03-30");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_issue_detail_invalid_updated_at() {
+        let json = r#"{
+            "number": 1,
+            "title": "Test",
+            "state": "OPEN",
+            "body": "",
+            "updatedAt": "not-a-date",
+            "createdAt": "2026-01-01T00:00:00Z",
+            "author": {"login": "user"},
+            "comments": []
+        }"#;
+        let result = parse_issue_detail(json);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_issue_detail_invalid_created_at() {
+        let json = r#"{
+            "number": 1,
+            "title": "Test",
+            "state": "OPEN",
+            "body": "",
+            "updatedAt": "2026-01-01T00:00:00Z",
+            "createdAt": "bogus",
+            "author": {"login": "user"},
+            "comments": []
+        }"#;
+        let result = parse_issue_detail(json);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_issue_detail_invalid_comment_date() {
+        let json = r#"{
+            "number": 1,
+            "title": "Test",
+            "state": "OPEN",
+            "body": "",
+            "updatedAt": "2026-01-01T00:00:00Z",
+            "createdAt": "2026-01-01T00:00:00Z",
+            "author": {"login": "user"},
+            "comments": [
+                {
+                    "author": {"login": "commenter"},
+                    "body": "hi",
+                    "createdAt": "nope"
+                }
+            ]
+        }"#;
+        let result = parse_issue_detail(json);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_issue_detail_missing_required_field() {
+        // Missing "body" field
+        let json = r#"{
+            "number": 1,
+            "title": "Test",
+            "state": "OPEN",
+            "updatedAt": "2026-01-01T00:00:00Z",
+            "createdAt": "2026-01-01T00:00:00Z",
+            "author": {"login": "user"}
+        }"#;
+        let result = parse_issue_detail(json);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_unknown_state_treated_as_closed() {
+        // Any state other than "OPEN" is treated as closed.
+        let json = r#"{
+            "number": 1,
+            "title": "Test",
+            "state": "SOMETHING_ELSE",
+            "body": "",
+            "updatedAt": "2026-01-01T00:00:00Z",
+            "createdAt": "2026-01-01T00:00:00Z",
+            "author": {"login": "user"},
+            "comments": []
+        }"#;
+        let issue = parse_issue_detail(json).unwrap();
+        assert_eq!(issue.state, RemoteState::Closed);
+    }
+
+    #[test]
+    fn test_parse_issue_list_propagates_item_error() {
+        // The second issue has an invalid date; the whole list parse should fail.
+        let json = r#"[
+            {
+                "number": 1,
+                "title": "Good",
+                "state": "OPEN",
+                "body": "",
+                "updatedAt": "2026-01-01T00:00:00Z",
+                "createdAt": "2026-01-01T00:00:00Z",
+                "author": {"login": "a"}
+            },
+            {
+                "number": 2,
+                "title": "Bad",
+                "state": "OPEN",
+                "body": "",
+                "updatedAt": "garbage",
+                "createdAt": "2026-01-01T00:00:00Z",
+                "author": {"login": "b"}
+            }
+        ]"#;
+        let result = parse_issue_list(json);
+        assert!(result.is_err());
+    }
+
+    // --- GitHubProvider basic construction ---
+
+    #[test]
+    fn test_github_provider_name() {
+        let provider = GitHubProvider::new("owner/repo");
+        assert_eq!(provider.name(), "github");
+        assert_eq!(provider.repo, "owner/repo");
+    }
 }
