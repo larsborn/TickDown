@@ -37,10 +37,12 @@ The production config file is at:
 - `store.rs` -- Filesystem layer. Scans directories, reads/writes tickets,
   handles file renaming when titles change, auto-increments ticket numbers.
 - `commands/` -- One file per command. `create` and `comment` are write commands
-  that normalize on touch. `show`, `list`, `edit` are read-only. `close` just
-  moves files. `rename` changes titles, `modify` moves tickets between projects,
-  `rename_project` renames an entire project (files + config).
-  `create_project` adds a new project to the config file.
+  that normalize on touch. `show`, `list`, `search`, `edit` are read-only.
+  `close` just moves files. `rename` changes titles, `modify` moves tickets
+  between projects, `rename_project` renames an entire project (files +
+  config). `create_project` adds a new project to the config file.
+  `search` does case-insensitive substring matching across title, preamble
+  and comment bodies and reuses `list::print_ticket_row` for output.
 - `sync/` -- Two-way sync with external issue trackers. `mod.rs` defines the
   `SyncProvider` trait and shared types (`RemoteIssue`, `RemoteComment`).
   `github.rs` implements the GitHub provider via the `gh` CLI (JSON parsing).
@@ -90,6 +92,7 @@ all of them. See `parser.rs` tests for examples:
 ## Command aliases
 
 - `list` -> `ls`
+- `search` -> `s`
 - `close` -> `done`
 - `rename` -> `mv`
 - `modify` -> `mod`
@@ -111,7 +114,7 @@ all values.
 
 ## Tests
 
-232 tests across 16 modules. Run with `cargo test`.
+240 tests across 17 modules. Run with `cargo test`.
 Overall coverage ~94% (regions/lines/functions).
 Use `cargo llvm-cov --summary-only` for per-file coverage. Tests cover:
 - `ticket.rs` -- TicketId parsing/rejection, Display, all canonical serialization
@@ -149,6 +152,9 @@ Use `cargo llvm-cov --summary-only` for per-file coverage. Tests cover:
   config), `resolve_sync_configs` filtering and error paths, provider factory,
   `resolve` validation (invalid id, unknown ticket, unsynced ticket, no
   matching `[[sync]]` config)
+- `commands/search.rs` -- empty dir, match in title/preamble/comment body,
+  case-insensitive matching, no-match path, closed-excluded-by-default,
+  `--all` includes done
 
 ## Sync feature
 

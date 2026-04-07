@@ -62,6 +62,7 @@ Commands:
   create-project  Create a new project in the config
   show            Pretty-print a ticket
   list (ls)       List tickets
+  search (s)      Substring search across title, preamble and comments
   edit            Open ticket in $EDITOR
   comment         Add a comment to a ticket (normalizes file)
   close (done)    Move ticket to done/
@@ -91,6 +92,19 @@ $ td list --prefix TD
 Use `--all` to include closed tickets from `done/`. Use `--project` to filter
 by project name instead of prefix. Running `td` with no subcommand is
 shorthand for `td list`.
+
+### Search tickets
+
+```
+$ td search rhubarb
+       LAW-7     In Progress  Rhubarb pie recipe research
+       LAW-9             New  Notes from the rhubarb meeting
+```
+
+`td search <query>` (alias `td s <query>`) does a case-insensitive substring
+match across each ticket's title, preamble, and comment bodies. Output is
+identical to `td list`. Use `-a` / `--all` to also search closed tickets in
+`done/`.
 
 ### Create a ticket
 
@@ -385,6 +399,7 @@ src/
     create_project.rs Create a new project in the config
     show.rs           Pretty-print ticket with colored output
     list.rs           List tickets with filtering
+    search.rs         Substring search across title/preamble/comments
     edit.rs           Open in $EDITOR
     comment.rs        Append comment and normalize file
     close.rs          Move to done/
@@ -400,7 +415,7 @@ src/
 cargo test
 ```
 
-232 tests across 16 modules, ~94% line coverage:
+240 tests across 17 modules, ~94% line coverage:
 
 - `config.rs` -- project/prefix lookups, resolve_prefix priority, TOML parsing
   (with and without `[[sync]]`)
@@ -424,6 +439,8 @@ cargo test
 - `commands/close.rs` -- move to done/
 - `commands/show.rs` -- display with various formats
 - `commands/list.rs` -- filtering by prefix/project, include done
+- `commands/search.rs` -- case-insensitive substring matching against title,
+  preamble, and comments; closed-by-default; `--all` includes done
 - `commands/rename.rs` -- title changes
 - `commands/modify.rs` -- cross-project moves, validation
 - `commands/rename_project.rs` -- bulk file rename, config updates, conflict detection

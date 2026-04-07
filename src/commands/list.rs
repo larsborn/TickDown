@@ -3,6 +3,7 @@ use colored::Colorize;
 
 use crate::config::Config;
 use crate::store::TicketStore;
+use crate::ticket::Ticket;
 
 pub fn run(
     config: &Config,
@@ -37,35 +38,41 @@ pub fn run(
     }
 
     for ticket in &filtered {
-        let id_str = format!("{}", ticket.id);
-        let status = ticket.status.as_deref().unwrap_or("-");
-        let title = if ticket.title.is_empty() {
-            "(no title)"
-        } else {
-            &ticket.title
-        };
-
-        let status_colored = match status {
-            "Done" => status.green(),
-            "In Progress" => status.yellow(),
-            "Waiting For" => status.cyan(),
-            _ => status.white(),
-        };
-
-        if ticket.is_closed {
-            println!(
-                "{:>12}  {:>14}  {} {}",
-                id_str.dimmed(),
-                status_colored,
-                title.dimmed(),
-                "(done)".dimmed()
-            );
-        } else {
-            println!("{:>12}  {:>14}  {}", id_str.bold(), status_colored, title);
-        }
+        print_ticket_row(ticket);
     }
 
     Ok(())
+}
+
+/// Print a single ticket as one row of the standard list table.
+/// Shared with `commands::search` so output stays consistent.
+pub(crate) fn print_ticket_row(ticket: &Ticket) {
+    let id_str = format!("{}", ticket.id);
+    let status = ticket.status.as_deref().unwrap_or("-");
+    let title = if ticket.title.is_empty() {
+        "(no title)"
+    } else {
+        &ticket.title
+    };
+
+    let status_colored = match status {
+        "Done" => status.green(),
+        "In Progress" => status.yellow(),
+        "Waiting For" => status.cyan(),
+        _ => status.white(),
+    };
+
+    if ticket.is_closed {
+        println!(
+            "{:>12}  {:>14}  {} {}",
+            id_str.dimmed(),
+            status_colored,
+            title.dimmed(),
+            "(done)".dimmed()
+        );
+    } else {
+        println!("{:>12}  {:>14}  {}", id_str.bold(), status_colored, title);
+    }
 }
 
 #[cfg(test)]

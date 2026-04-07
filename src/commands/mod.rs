@@ -7,5 +7,6 @@ pub mod list;
 pub mod modify;
 pub mod rename;
 pub mod rename_project;
+pub mod search;
 pub mod show;
 pub mod sync;

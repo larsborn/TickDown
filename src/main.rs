@@ -114,6 +114,15 @@ enum Commands {
         #[arg(short, long)]
         all: bool,
     },
+    /// Substring search across ticket title, preamble and comments
+    #[command(alias = "s")]
+    Search {
+        /// Substring to search for (case-insensitive)
+        query: String,
+        /// Include closed tickets from done/
+        #[arg(short, long)]
+        all: bool,
+    },
     /// Open ticket in $EDITOR
     Edit {
         /// Ticket ID (e.g., LAW-2)
@@ -192,6 +201,7 @@ fn main() -> Result<()> {
             project,
             all,
         } => commands::list::run(&config, prefix.as_deref(), project.as_deref(), all),
+        Commands::Search { query, all } => commands::search::run(&config, &query, all),
         Commands::Edit { ticket_id } => commands::edit::run(&config, &ticket_id),
         Commands::Comment { ticket_id, text } => {
             commands::comment::run(&config, &ticket_id, &text)
