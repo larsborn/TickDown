@@ -36,7 +36,7 @@ struct Cli {
     config: Option<PathBuf>,
 
     #[command(subcommand)]
-    command: Commands,
+    command: Option<Commands>,
 }
 
 #[derive(Subcommand)]
@@ -175,7 +175,13 @@ fn main() -> Result<()> {
     let cli = Cli::parse();
     let config = config::load_config(cli.config.as_deref())?;
 
-    match cli.command {
+    let command = cli.command.unwrap_or(Commands::List {
+        prefix: None,
+        project: None,
+        all: false,
+    });
+
+    match command {
         Commands::Create { project, title } => commands::create::run(&config, &project, &title),
         Commands::CreateProject { name, prefix } => {
             commands::create_project::run(&config, &name, &prefix)

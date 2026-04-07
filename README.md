@@ -89,7 +89,8 @@ $ td list --prefix TD
 ```
 
 Use `--all` to include closed tickets from `done/`. Use `--project` to filter
-by project name instead of prefix.
+by project name instead of prefix. Running `td` with no subcommand is
+shorthand for `td list`.
 
 ### Create a ticket
 

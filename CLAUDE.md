@@ -94,6 +94,8 @@ all of them. See `parser.rs` tests for examples:
 - `rename` -> `mv`
 - `modify` -> `mod`
 
+Running `td` with no subcommand defaults to `td list` (open tickets only).
+
 ## Filename sanitization
 
 Titles containing path-unsafe characters (`/ \ : * ? " < > |`) are sanitized
