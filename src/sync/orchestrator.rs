@@ -105,41 +105,32 @@ pub fn sync_project(
                 );
                 summary.conflicts += 1;
             } else if local_dirty {
-                let new_count = ticket.comments.len() - metadata.comment_count;
-                if new_count > 0 {
-                    match push_comments(
-                        &store,
-                        ticket,
-                        &metadata,
-                        provider,
-                        sync_config,
-                        default_status,
-                    ) {
-                        Ok(()) => summary.pushed_comments += 1,
-                        Err(e) => summary.errors.push(format!("{}: {}", ticket.id, e)),
+                match rebaseline_local(
+                    &store,
+                    ticket,
+                    metadata,
+                    provider,
+                    sync_config,
+                    default_status,
+                ) {
+                    Ok(pushed) => {
+                        if pushed > 0 {
+                            println!(
+                                "  Pushed {} comment(s) for {} -> remote #{}",
+                                pushed, ticket.id, remote_id
+                            );
+                            summary.pushed_comments += 1;
+                        } else {
+                            summary.unchanged += 1;
+                        }
                     }
-                } else {
-                    // Local content changed but no new comments to push
-                    // (e.g., preamble edit). Just update the hash.
-                    let mut ticket = ticket.clone();
-                    let hash = compute_content_hash(&ticket, default_status);
-                    let new_meta = SyncMetadata {
-                        content_hash: hash,
-                        ..metadata.clone()
-                    };
-                    ticket.frontmatter =
-                        Some(new_meta.merge_into_frontmatter(ticket.frontmatter.as_deref()));
-                    if let Err(e) = store.write_ticket(&ticket, default_status) {
-                        summary.errors.push(format!("{}: {}", ticket.id, e));
-                    } else {
-                        summary.unchanged += 1;
-                    }
+                    Err(e) => summary.errors.push(format!("{}: {}", ticket.id, e)),
                 }
             } else if remote_dirty {
                 match pull_issue(
                     &store,
                     Some(ticket),
-                    &remote,
+                    &remote.remote_id,
                     &prefix,
                     provider,
                     sync_config,
@@ -160,14 +151,14 @@ pub fn sync_project(
     }
 
     // Remote-only issues → pull new
-    for (remote_id, remote) in &remote_map {
+    for (remote_id, _remote) in &remote_map {
         if local_synced.contains_key(remote_id) {
             continue;
         }
         match pull_issue(
             &store,
             None,
-            remote,
+            remote_id,
             &prefix,
             provider,
             sync_config,
@@ -191,17 +182,17 @@ pub fn sync_project(
 
 /// Pull a remote issue into a local ticket.
 /// If `existing` is Some, updates that ticket. Otherwise creates a new one.
-fn pull_issue(
+pub(crate) fn pull_issue(
     store: &TicketStore,
     existing: Option<&Ticket>,
-    remote_summary: &RemoteIssue,
+    remote_id: &str,
     prefix: &str,
     provider: &dyn SyncProvider,
     sync_config: &SyncConfig,
     default_status: &str,
 ) -> Result<()> {
     // Fetch full issue with comments
-    let full = provider.fetch_issue(&remote_summary.remote_id)?;
+    let full = provider.fetch_issue(remote_id)?;
 
     let (id, was_closed) = if let Some(t) = existing {
         (t.id.clone(), t.is_closed)
@@ -270,22 +261,32 @@ fn pull_issue(
     Ok(())
 }
 
-/// Push new local comments to a remote issue.
-fn push_comments(
+/// Push any new local comments, then re-baseline the local sync metadata
+/// against the current remote state.
+///
+/// This is used both by the normal `local_dirty && !remote_dirty` sync path
+/// (where it pushes new tail comments and refreshes the hash) and by
+/// `td sync resolve --keep-local` (where it forces the local content to
+/// become the new baseline regardless of remote changes).
+///
+/// Returns the number of comments that were pushed.
+pub(crate) fn rebaseline_local(
     store: &TicketStore,
     ticket: &Ticket,
     metadata: &SyncMetadata,
     provider: &dyn SyncProvider,
     sync_config: &SyncConfig,
     default_status: &str,
-) -> Result<()> {
+) -> Result<usize> {
     let new_comments = &ticket.comments[metadata.comment_count..];
     for comment in new_comments {
         let body = format_comment_for_push(comment);
         provider.add_comment(&metadata.remote_id, &body)?;
     }
+    let pushed = new_comments.len();
 
-    // Re-fetch to get updated_at, then update metadata
+    // Re-fetch to pick up the freshest remote `updated_at` (even if we
+    // didn't push anything ourselves — `--keep-local` needs this).
     let updated = provider.fetch_issue(&metadata.remote_id)?;
     let mut ticket = ticket.clone();
     let hash = compute_content_hash(&ticket, default_status);
@@ -300,13 +301,7 @@ fn push_comments(
     ticket.frontmatter = Some(new_meta.merge_into_frontmatter(ticket.frontmatter.as_deref()));
     store.write_ticket(&ticket, default_status)?;
 
-    println!(
-        "  Pushed {} comment(s) for {} -> remote #{}",
-        new_comments.len(),
-        ticket.id,
-        metadata.remote_id
-    );
-    Ok(())
+    Ok(pushed)
 }
 
 /// Push a locally-created ticket as a new remote issue.
@@ -476,7 +471,7 @@ pub fn init_sync(
         pull_issue(
             &store,
             None,
-            issue,
+            &issue.remote_id,
             &prefix,
             provider,
             sync_config,
@@ -1578,6 +1573,218 @@ mod tests {
         assert!(out.contains("*Anon*"));
         assert!(!out.contains("(20"));
         assert!(out.contains("Just text"));
+    }
+
+    // --- rebaseline_local (helper used by both sync_project and resolve --keep-local) ---
+
+    #[test]
+    fn test_rebaseline_local_updates_hash_and_remote_updated() {
+        let dir = tempfile::tempdir().unwrap();
+        let config = test_config(dir.path());
+        let sync_cfg = test_sync_config();
+        let store = TicketStore::new(dir.path());
+
+        let stale_remote_updated = Utc::now() - chrono::Duration::hours(2);
+        let comment_ts = stale_remote_updated.naive_utc();
+        let comments = vec![Comment {
+            author: "user".to_string(),
+            timestamp: Some(comment_ts),
+            body: "Body".to_string(),
+        }];
+
+        // Local ticket with stale (wrong) hash and stale remote_updated.
+        let ticket = write_synced_ticket(
+            &store,
+            "TP",
+            1,
+            "Title",
+            comments,
+            "stale_hash".to_string(),
+            "1",
+            stale_remote_updated,
+            1,
+            false,
+        );
+        let metadata = SyncMetadata::from_frontmatter(
+            ticket.frontmatter.as_ref().unwrap(),
+        )
+        .unwrap();
+
+        // Provider returns the issue with a NEWER updated_at than what we stored.
+        let fresh_remote_updated = Utc::now();
+        let provider = MockProvider::new(vec![RemoteIssue {
+            remote_id: "1".to_string(),
+            title: "Title".to_string(),
+            state: RemoteState::Open,
+            body: "Body".to_string(),
+            author: "user".to_string(),
+            created_at: stale_remote_updated,
+            comments: vec![],
+            updated_at: fresh_remote_updated,
+        }]);
+
+        // Re-read the ticket via the store so we get the canonical (post-write) form.
+        let ticket = store.read_ticket(&ticket.id).unwrap();
+        rebaseline_local(
+            &store,
+            &ticket,
+            &metadata,
+            &provider,
+            &sync_cfg,
+            &config.statuses.default,
+        )
+        .unwrap();
+
+        // Both pointers should now match the current local content + the fresh remote.
+        let updated = store.read_ticket(&ticket.id).unwrap();
+        let new_meta =
+            SyncMetadata::from_frontmatter(updated.frontmatter.as_ref().unwrap()).unwrap();
+        assert_ne!(new_meta.content_hash, "stale_hash");
+        let expected_hash = compute_content_hash(&updated, &config.statuses.default);
+        assert_eq!(new_meta.content_hash, expected_hash);
+        assert_eq!(new_meta.remote_updated, fresh_remote_updated);
+        assert_eq!(new_meta.comment_count, 1);
+        // No comments were pushed (none new locally).
+        assert!(provider.comments_pushed.borrow().is_empty());
+    }
+
+    #[test]
+    fn test_rebaseline_local_pushes_new_comments() {
+        let dir = tempfile::tempdir().unwrap();
+        let config = test_config(dir.path());
+        let sync_cfg = test_sync_config();
+        let store = TicketStore::new(dir.path());
+
+        let stale_remote_updated = Utc::now() - chrono::Duration::hours(2);
+        let comments = vec![
+            Comment {
+                author: "remote-user".to_string(),
+                timestamp: Some(stale_remote_updated.naive_utc()),
+                body: "Original".to_string(),
+            },
+            Comment {
+                author: "Tester".to_string(),
+                timestamp: Some(Utc::now().naive_utc()),
+                body: "Local follow-up".to_string(),
+            },
+        ];
+
+        // metadata.comment_count == 1 → second comment is "new".
+        let ticket = write_synced_ticket(
+            &store,
+            "TP",
+            1,
+            "Title",
+            comments,
+            "stale".to_string(),
+            "1",
+            stale_remote_updated,
+            1,
+            false,
+        );
+        let metadata = SyncMetadata::from_frontmatter(
+            ticket.frontmatter.as_ref().unwrap(),
+        )
+        .unwrap();
+
+        let fresh_remote_updated = Utc::now();
+        let provider = MockProvider::new(vec![RemoteIssue {
+            remote_id: "1".to_string(),
+            title: "Title".to_string(),
+            state: RemoteState::Open,
+            body: "Original".to_string(),
+            author: "remote-user".to_string(),
+            created_at: stale_remote_updated,
+            comments: vec![],
+            updated_at: fresh_remote_updated,
+        }]);
+
+        let ticket = store.read_ticket(&ticket.id).unwrap();
+        rebaseline_local(
+            &store,
+            &ticket,
+            &metadata,
+            &provider,
+            &sync_cfg,
+            &config.statuses.default,
+        )
+        .unwrap();
+
+        // The new local comment was pushed.
+        let pushed = provider.comments_pushed.borrow();
+        assert_eq!(pushed.len(), 1);
+        assert_eq!(pushed[0].0, "1");
+        assert!(pushed[0].1.contains("Local follow-up"));
+
+        // Metadata bumped to 2 comments.
+        let updated = store.read_ticket(&ticket.id).unwrap();
+        let new_meta =
+            SyncMetadata::from_frontmatter(updated.frontmatter.as_ref().unwrap()).unwrap();
+        assert_eq!(new_meta.comment_count, 2);
+        assert_eq!(new_meta.remote_updated, fresh_remote_updated);
+    }
+
+    #[test]
+    fn test_rebaseline_local_then_sync_is_clean() {
+        let dir = tempfile::tempdir().unwrap();
+        let config = test_config(dir.path());
+        let sync_cfg = test_sync_config();
+        let store = TicketStore::new(dir.path());
+
+        let stale_remote_updated = Utc::now() - chrono::Duration::hours(2);
+        let comments = vec![Comment {
+            author: "user".to_string(),
+            timestamp: Some(stale_remote_updated.naive_utc()),
+            body: "Body".to_string(),
+        }];
+
+        let ticket = write_synced_ticket(
+            &store,
+            "TP",
+            1,
+            "Title",
+            comments,
+            "stale_hash".to_string(),
+            "1",
+            stale_remote_updated,
+            1,
+            false,
+        );
+        let metadata = SyncMetadata::from_frontmatter(
+            ticket.frontmatter.as_ref().unwrap(),
+        )
+        .unwrap();
+
+        let fresh_remote_updated = Utc::now();
+        let remote_issue = RemoteIssue {
+            remote_id: "1".to_string(),
+            title: "Title".to_string(),
+            state: RemoteState::Open,
+            body: "Body".to_string(),
+            author: "user".to_string(),
+            created_at: stale_remote_updated,
+            comments: vec![],
+            updated_at: fresh_remote_updated,
+        };
+        let provider = MockProvider::new(vec![remote_issue]);
+
+        let ticket = store.read_ticket(&ticket.id).unwrap();
+        rebaseline_local(
+            &store,
+            &ticket,
+            &metadata,
+            &provider,
+            &sync_cfg,
+            &config.statuses.default,
+        )
+        .unwrap();
+
+        // After rebaseline, a normal sync should consider this ticket fully clean.
+        let summary = sync_project(&config, &sync_cfg, &provider).unwrap();
+        assert_eq!(summary.unchanged, 1);
+        assert_eq!(summary.pulled, 0);
+        assert_eq!(summary.pushed_comments, 0);
+        assert_eq!(summary.conflicts, 0);
     }
 
     #[test]

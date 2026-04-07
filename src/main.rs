@@ -6,7 +6,7 @@ mod sync;
 mod ticket;
 
 use anyhow::Result;
-use clap::{Parser, Subcommand};
+use clap::{ArgGroup, Parser, Subcommand};
 use std::path::PathBuf;
 
 #[cfg(windows)]
@@ -60,6 +60,23 @@ enum SyncAction {
     Status {
         /// Project name (shows all if omitted)
         project: Option<String>,
+    },
+    /// Force-resolve a sync conflict on a single ticket
+    #[command(group(ArgGroup::new("strategy").required(true).multiple(false).args(["pull", "keep_local"])))]
+    Resolve {
+        /// Ticket ID (e.g., MLS-93)
+        ticket_id: String,
+        /// Discard local, take remote (mutually exclusive with --keep-local)
+        #[arg(long)]
+        pull: bool,
+        /// Keep local content as the new baseline; pushes any new local
+        /// comments first, then re-points sync metadata at the current
+        /// remote without merging remote-side changes
+        #[arg(long)]
+        keep_local: bool,
+        /// Skip the confirmation prompt
+        #[arg(short, long)]
+        yes: bool,
     },
 }
 
@@ -199,6 +216,20 @@ fn main() -> Result<()> {
             }
             Some(SyncAction::Status { project }) => {
                 commands::sync::status(&config, project.as_deref())
+            }
+            Some(SyncAction::Resolve {
+                ticket_id,
+                pull,
+                keep_local,
+                yes,
+            }) => {
+                let strategy = if pull {
+                    commands::sync::ResolveStrategy::Pull
+                } else {
+                    debug_assert!(keep_local);
+                    commands::sync::ResolveStrategy::KeepLocal
+                };
+                commands::sync::resolve(&config, &ticket_id, strategy, yes)
             }
             None => commands::sync::run(&config, None),
         },

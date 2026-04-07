@@ -109,7 +109,7 @@ all values.
 
 ## Tests
 
-225 tests across 16 modules. Run with `cargo test`.
+232 tests across 16 modules. Run with `cargo test`.
 Overall coverage ~94% (regions/lines/functions).
 Use `cargo llvm-cov --summary-only` for per-file coverage. Tests cover:
 - `ticket.rs` -- TicketId parsing/rejection, Display, all canonical serialization
@@ -140,10 +140,13 @@ Use `cargo llvm-cov --summary-only` for per-file coverage. Tests cover:
   unchanged-no-action, comment formatting, conflict detection, pull updates
   on remote dirty, local-dirty hash-only update, push comments on synced
   ticket, open/closed state transitions, remote deleted warning, foreign
-  provider metadata as unsynced, `show_status`, `init_sync`,
-  `append_sync_to_config` (all with MockProvider)
+  provider metadata as unsynced, `rebaseline_local` (no new comments,
+  pushes new comments, post-rebaseline sync is clean), `show_status`,
+  `init_sync`, `append_sync_to_config` (all with MockProvider)
 - `commands/sync.rs` -- init validation (unknown provider/project, duplicate
-  config), `resolve_sync_configs` filtering and error paths, provider factory
+  config), `resolve_sync_configs` filtering and error paths, provider factory,
+  `resolve` validation (invalid id, unknown ticket, unsynced ticket, no
+  matching `[[sync]]` config)
 
 ## Sync feature
 
@@ -153,6 +156,11 @@ for future Jira/Redmine support.
 - `td sync init github owner/repo --project Name` -- configure and initial pull
 - `td sync run [project]` -- bidirectional sync (all projects if omitted)
 - `td sync status [project]` -- show dirty state (read-only, no remote fetch)
+- `td sync resolve <id> --pull|--keep-local [-y]` -- force-resolve a conflict
+  on a single ticket. `--pull` overwrites local with remote. `--keep-local`
+  pushes any new local comments and re-points sync metadata at the current
+  remote without merging remote-side changes. Mutually exclusive flags, one
+  required. Prompts for confirmation unless `-y` is given.
 
 **Content mapping**: GitHub issue body → first TickDown Comment (preamble stays
 free for local notes). GitHub comments → subsequent Comments.
@@ -163,6 +171,13 @@ stored as `sync_hash` in frontmatter. Hash mismatch = locally dirty. Remote
 
 **Push scope (current)**: Only new comments are pushed. Title/body/status push
 is deferred. New local tickets in synced projects auto-push as new issues.
+
+**Conflict resolution**: When `sync_project` reports `CONFLICT` (both local
+and remote dirty), the ticket is skipped — neither side moves. Use
+`td sync resolve <id> --pull` (remote wins) or `--keep-local` (re-baseline
+to current local + push new comments) to break the deadlock. The
+`rebaseline_local` helper in `orchestrator.rs` is shared between the
+normal `local_dirty && !remote_dirty` sync path and `--keep-local`.
 
 **Config**: `[[sync]]` array in `.tickdown.toml`:
 ```toml

@@ -266,7 +266,34 @@ by comparing a SHA-256 hash of the ticket content with the stored `sync_hash`.
 - **Push**: New comments added locally are pushed to GitHub. Tickets created
   locally in a synced project are pushed as new GitHub issues.
 - **Conflicts**: If both local and remote changed since last sync, the ticket
-  is skipped with a warning.
+  is skipped with a warning. Use `td sync resolve` to break the deadlock
+  (see below).
+
+#### Resolve a sync conflict
+
+When a ticket is reported as `CONFLICT`, neither the local nor the remote
+side will move until you pick a winner:
+
+```
+$ td sync resolve TD-12 --pull
+This will OVERWRITE local TD-12 with remote larsborn/TickDown#12.
+Any local changes (comments, preamble, status) will be lost.
+Continue? [y/N] y
+  Updated TD-12 <- remote #12 "Bug report"
+```
+
+Two strategies (mutually exclusive, one required):
+
+- `--pull`: discard local changes and overwrite the local ticket with the
+  current remote state.
+- `--keep-local`: keep the current local content as the new baseline. Any
+  new local comments are pushed to the remote first, then sync metadata is
+  re-pointed at the current remote. Remote-side changes since the last
+  sync are **not** merged.
+
+Pass `-y` / `--yes` to skip the confirmation prompt. The command works on
+any synced ticket, not just conflicting ones — it's also a useful escape
+hatch when local sync metadata gets out of sync for any reason.
 
 **Current limitations** (planned for future):
 
@@ -372,7 +399,7 @@ src/
 cargo test
 ```
 
-225 tests across 16 modules, ~94% line coverage:
+232 tests across 16 modules, ~94% line coverage:
 
 - `config.rs` -- project/prefix lookups, resolve_prefix priority, TOML parsing
   (with and without `[[sync]]`)
@@ -388,7 +415,8 @@ cargo test
   (open/closed), hash-only updates, foreign-provider metadata, `init_sync`,
   `show_status`, `append_sync_to_config` (MockProvider)
 - `commands/sync.rs` -- init validation (unknown provider/project, duplicates),
-  `resolve_sync_configs` filtering, provider factory
+  `resolve_sync_configs` filtering, provider factory, `resolve` validation
+  (invalid id, unknown ticket, unsynced, no matching sync config)
 - `commands/create.rs` -- ticket creation, auto-increment, project/prefix resolution
 - `commands/create_project.rs` -- project creation, name/prefix validation and conflicts
 - `commands/comment.rs` -- comment appending, file normalization
