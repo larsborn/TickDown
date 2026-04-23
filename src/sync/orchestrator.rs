@@ -59,6 +59,7 @@ pub fn sync_project(
         .into_iter()
         .filter(|t| t.id.prefix == prefix)
         .collect();
+    let open_count = project_tickets.iter().filter(|t| !t.is_closed).count();
 
     // Partition into synced (has metadata) and unsynced
     let mut local_synced: HashMap<String, (Ticket, SyncMetadata)> = HashMap::new();
@@ -79,11 +80,12 @@ pub fn sync_project(
     // Fetch remote issues (lightweight, no comments)
     let remote_issues = provider.list_issues()?;
     println!(
-        "  Fetched {} remote issues, {} local ({} synced, {} unsynced)",
+        "  Fetched {} remote issues, {} local ({} synced, {} unsynced, {} open)",
         remote_issues.len(),
         local_synced.len() + local_unsynced.len(),
         local_synced.len(),
         local_unsynced.len(),
+        open_count,
     );
     let mut remote_map: HashMap<String, RemoteIssue> = HashMap::new();
     for issue in remote_issues {
